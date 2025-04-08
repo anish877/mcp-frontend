@@ -1,5 +1,5 @@
 "use client";
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -39,146 +39,163 @@ import {
   SelectValue 
 } from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { BACKEND_URL } from '@/config';
+import axios from 'axios';
+import { toast } from '@/hooks/use-toast';
 
-// Mock data
-type Partner = {
-  id: string;
-  name: string;
+// Interface to match backend data structure
+interface Partner {
+  relationshipId: string;
+  partner: {
+    _id: string;
+    fullName: string;
+    email: string;
+    phone: string;
+    status: 'ACTIVE' | 'INACTIVE';
+    wallet: number;
+  };
+  commissionRate: number;
+  commissionType: 'PERCENTAGE' | 'FIXED';
+  status: 'ACTIVE' | 'INACTIVE';
+  createdAt: string;
+}
+
+// Form data for adding a new partner
+interface PartnerFormData {
+  fullName: string;
+  email: string;
+  password: string;
   phone: string;
-  status: 'active' | 'inactive';
-  ordersCompleted: number;
-  balance: number;
-  address: string;
-  role: 'collector' | 'delivery' | 'both';
-  paymentType: 'commission' | 'fixed';
-  paymentValue: number;
-  joinDate: string;
-};
+  commissionRate: number;
+  commissionType: 'PERCENTAGE' | 'FIXED';
+}
 
-const partnersData: Partner[] = [
-  {
-    id: '1',
-    name: 'Rahul Sharma',
-    phone: '+91 9876543210',
-    status: 'active',
-    ordersCompleted: 156,
-    balance: 4500,
-    address: 'Sector 12, Noida, UP',
-    role: 'collector',
-    paymentType: 'commission',
-    paymentValue: 10,
-    joinDate: '12 Jan 2023',
-  },
-  {
-    id: '2',
-    name: 'Priya Patel',
-    phone: '+91 8765432109',
-    status: 'active',
-    ordersCompleted: 89,
-    balance: 2800,
-    address: 'MG Road, Bangalore',
-    role: 'both',
-    paymentType: 'fixed',
-    paymentValue: 50,
-    joinDate: '05 Mar 2023',
-  },
-  {
-    id: '3',
-    name: 'Amit Kumar',
-    phone: '+91 7654321098',
-    status: 'inactive',
-    ordersCompleted: 67,
-    balance: 1200,
-    address: 'Laxmi Nagar, Delhi',
-    role: 'delivery',
-    paymentType: 'commission',
-    paymentValue: 8,
-    joinDate: '27 Apr 2023',
-  },
-  {
-    id: '4',
-    name: 'Neha Singh',
-    phone: '+91 6543210987',
-    status: 'active',
-    ordersCompleted: 102,
-    balance: 3600,
-    address: 'Vashi, Navi Mumbai',
-    role: 'collector',
-    paymentType: 'fixed',
-    paymentValue: 60,
-    joinDate: '18 May 2023',
-  },
-  {
-    id: '5',
-    name: 'Suresh Verma',
-    phone: '+91 9876543211',
-    status: 'active',
-    ordersCompleted: 78,
-    balance: 2100,
-    address: 'Camp, Pune',
-    role: 'delivery',
-    paymentType: 'commission',
-    paymentValue: 12,
-    joinDate: '02 Jun 2023',
-  },
-  {
-    id: '6',
-    name: 'Anjali Reddy',
-    phone: '+91 8765432108',
-    status: 'inactive',
-    ordersCompleted: 45,
-    balance: 900,
-    address: 'Banjara Hills, Hyderabad',
-    role: 'both',
-    paymentType: 'fixed',
-    paymentValue: 55,
-    joinDate: '14 Jul 2023',
-  },
-  {
-    id: '7',
-    name: 'Rajesh Gupta',
-    phone: '+91 7654321097',
-    status: 'active',
-    ordersCompleted: 114,
-    balance: 3100,
-    address: 'Vasant Kunj, Delhi',
-    role: 'collector',
-    paymentType: 'commission',
-    paymentValue: 10,
-    joinDate: '23 Aug 2023',
-  },
-  {
-    id: '8',
-    name: 'Kavita Joshi',
-    phone: '+91 6543210986',
-    status: 'active',
-    ordersCompleted: 93,
-    balance: 2800,
-    address: 'Andheri, Mumbai',
-    role: 'delivery',
-    paymentType: 'fixed',
-    paymentValue: 50,
-    joinDate: '09 Sep 2023',
-  },
-];
+const initialFormState: PartnerFormData = {
+  fullName: '',
+  email: '',
+  password: '',
+  phone: '',
+  commissionRate: 0,
+  commissionType: 'FIXED'
+};
 
 const Partners = () => {
   const [isAddPartnerOpen, setIsAddPartnerOpen] = useState(false);
-  const [filter, setFilter] = useState<'all' | 'active' | 'inactive'>('all');
+  const [filter, setFilter] = useState<'all' | 'ACTIVE' | 'INACTIVE'>('all');
   const [searchTerm, setSearchTerm] = useState('');
+  const [partners, setPartners] = useState<Partner[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [formData, setFormData] = useState<PartnerFormData>(initialFormState);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const filteredPartners = partnersData.filter(partner => {
+  // Fetch partners from backend
+  const fetchPartners = async () => {
+    setIsLoading(true);
+    try {
+      const response = await axios.get(`${BACKEND_URL}/partners`, { withCredentials: true });
+      setPartners(response.data.data);
+    } catch (error) {
+      console.error('Error fetching partners:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to load partners. Please try again.',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchPartners();
+  }, []);
+
+  // Filter partners based on search and status filter
+  const filteredPartners = partners.filter(partner => {
     // Apply status filter
     if (filter !== 'all' && partner.status !== filter) return false;
     
-    // Apply search filter
-    if (searchTerm && !partner.name.toLowerCase().includes(searchTerm.toLowerCase()) && 
-        !partner.phone.includes(searchTerm)) {
+    // Apply search filter (to name, email or phone)
+    if (searchTerm && !partner.partner.fullName.toLowerCase().includes(searchTerm.toLowerCase()) && 
+        !partner.partner.email.toLowerCase().includes(searchTerm.toLowerCase()) &&
+        !partner.partner.phone.includes(searchTerm)) {
       return false;
     }
     
     return true;
   });
+
+  // Handle form input changes
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const { id, value } = e.target;
+    setFormData(prev => ({
+      ...prev,
+      [id]: value
+    }));
+  };
+
+  // Handle commission type selection
+  const handleCommissionTypeChange = (value: string) => {
+    setFormData(prev => ({
+      ...prev,
+      commissionType: value as 'PERCENTAGE' | 'FIXED'
+    }));
+  };
+
+  // Add new partner
+  const handleAddPartner = async () => {
+    setIsSubmitting(true);
+    try {
+      const response = await axios.post(`${BACKEND_URL}/partners`, formData, {
+        withCredentials: true
+      });
+      
+      toast({
+        title: 'Success',
+        description: 'Partner added successfully',
+      });
+      
+      // Refresh partner list
+      fetchPartners();
+      
+      // Reset form and close dialog
+      setFormData(initialFormState);
+      setIsAddPartnerOpen(false);
+    } catch (error) {
+      console.error('Error adding partner:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to add partner',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  // Update partner status
+  const updatePartnerStatus = async (partnerId: string, status: 'ACTIVE' | 'INACTIVE') => {
+    try {
+      await axios.put(`${BACKEND_URL}/partners/${partnerId}`, { status }, {
+        withCredentials: true
+      });
+      
+      toast({
+        title: 'Success',
+        description: `Partner ${status === 'ACTIVE' ? 'activated' : 'deactivated'} successfully`,
+      });
+      
+      // Refresh partner list
+      fetchPartners();
+    } catch (error) {
+      console.error('Error updating partner status:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to update partner status',
+        variant: 'destructive',
+      });
+    }
+  };
 
   return (
     <AppLayout>
@@ -205,53 +222,75 @@ const Partners = () => {
               </DialogHeader>
               <div className="grid gap-4 py-4">
                 <div className="grid grid-cols-4 items-center gap-4">
-                  <Label htmlFor="name" className="text-right">
+                  <Label htmlFor="fullName" className="text-right">
                     Name
                   </Label>
-                  <Input id="name" className="col-span-3" />
+                  <Input 
+                    id="fullName" 
+                    className="col-span-3" 
+                    value={formData.fullName}
+                    onChange={handleInputChange}
+                  />
+                </div>
+                <div className="grid grid-cols-4 items-center gap-4">
+                  <Label htmlFor="email" className="text-right">
+                    Email
+                  </Label>
+                  <Input 
+                    id="email" 
+                    type="email"
+                    className="col-span-3"
+                    value={formData.email}
+                    onChange={handleInputChange}
+                  />
+                </div>
+                <div className="grid grid-cols-4 items-center gap-4">
+                  <Label htmlFor="password" className="text-right">
+                    Password
+                  </Label>
+                  <Input 
+                    id="password" 
+                    type="password"
+                    className="col-span-3"
+                    value={formData.password}
+                    onChange={handleInputChange}
+                  />
                 </div>
                 <div className="grid grid-cols-4 items-center gap-4">
                   <Label htmlFor="phone" className="text-right">
                     Phone
                   </Label>
-                  <Input id="phone" className="col-span-3" />
-                </div>
-                <div className="grid grid-cols-4 items-center gap-4">
-                  <Label htmlFor="address" className="text-right">
-                    Address
-                  </Label>
-                  <Input id="address" className="col-span-3" />
-                </div>
-                <div className="grid grid-cols-4 items-center gap-4">
-                  <Label htmlFor="role" className="text-right">
-                    Role
-                  </Label>
-                  <Select>
-                    <SelectTrigger className="col-span-3">
-                      <SelectValue placeholder="Select role" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="collector">Collector</SelectItem>
-                      <SelectItem value="delivery">Delivery</SelectItem>
-                      <SelectItem value="both">Both</SelectItem>
-                    </SelectContent>
-                  </Select>
+                  <Input 
+                    id="phone" 
+                    className="col-span-3"
+                    value={formData.phone}
+                    onChange={handleInputChange}
+                  />
                 </div>
                 <div className="grid grid-cols-4 items-center gap-4">
                   <Label htmlFor="payment" className="text-right">
                     Payment
                   </Label>
                   <div className="col-span-3 flex gap-2">
-                    <Select defaultValue="commission">
+                    <Select 
+                      value={formData.commissionType}
+                      onValueChange={handleCommissionTypeChange}
+                    >
                       <SelectTrigger className="w-[130px]">
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="commission">Commission</SelectItem>
-                        <SelectItem value="fixed">Fixed</SelectItem>
+                        <SelectItem value="PERCENTAGE">Percentage</SelectItem>
+                        <SelectItem value="FIXED">Fixed</SelectItem>
                       </SelectContent>
                     </Select>
-                    <Input type="number" placeholder="Value" />
+                    <Input 
+                      id="commissionRate"
+                      type="number" 
+                      placeholder="Value" 
+                      value={formData.commissionRate}
+                      onChange={handleInputChange}
+                    />
                   </div>
                 </div>
               </div>
@@ -259,8 +298,11 @@ const Partners = () => {
                 <Button variant="outline" onClick={() => setIsAddPartnerOpen(false)}>
                   Cancel
                 </Button>
-                <Button onClick={() => setIsAddPartnerOpen(false)}>
-                  Add Partner
+                <Button 
+                  onClick={handleAddPartner} 
+                  disabled={isSubmitting}
+                >
+                  {isSubmitting ? 'Adding...' : 'Add Partner'}
                 </Button>
               </div>
             </DialogContent>
@@ -293,10 +335,10 @@ const Partners = () => {
                     <DropdownMenuItem onClick={() => setFilter('all')}>
                       All Partners
                     </DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => setFilter('active')}>
+                    <DropdownMenuItem onClick={() => setFilter('ACTIVE')}>
                       Active Partners
                     </DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => setFilter('inactive')}>
+                    <DropdownMenuItem onClick={() => setFilter('INACTIVE')}>
                       Inactive Partners
                     </DropdownMenuItem>
                   </DropdownMenuContent>
@@ -325,140 +367,176 @@ const Partners = () => {
               </TabsList>
               
               <TabsContent value="list" className="p-0 sm:p-0">
-                <div className="overflow-x-auto">
-                  <table className="w-full">
-                    <thead>
-                      <tr className="border-b border-border text-left">
-                        <th className="py-3 px-4 font-medium text-muted-foreground text-xs sm:text-sm">Partner</th>
-                        <th className="py-3 px-2 sm:px-4 font-medium text-muted-foreground text-xs sm:text-sm">Status</th>
-                        <th className="py-3 px-2 sm:px-4 font-medium text-muted-foreground text-xs sm:text-sm">Role</th>
-                        <th className="py-3 px-2 sm:px-4 font-medium text-muted-foreground text-xs sm:text-sm">Orders</th>
-                        <th className="hidden sm:table-cell py-3 px-2 sm:px-4 font-medium text-muted-foreground text-xs sm:text-sm">Payment</th>
-                        <th className="py-3 px-2 sm:px-4 font-medium text-muted-foreground text-xs sm:text-sm">Balance</th>
-                        <th className="py-3 px-2 sm:px-4 font-medium text-muted-foreground text-xs sm:text-sm w-10"></th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {filteredPartners.map((partner) => (
-                        <tr key={partner.id} className="border-b border-border hover:bg-muted/50">
-                          <td className="py-3 px-4">
-                            <div className="flex items-center gap-2 sm:gap-3">
-                              <Avatar className="h-7 w-7 sm:h-8 sm:w-8">
-                                <AvatarFallback className="bg-primary/10 text-primary text-xs sm:text-sm">
-                                  {partner.name.charAt(0)}
-                                </AvatarFallback>
-                              </Avatar>
-                              <div className="min-w-0">
-                                <p className="font-medium text-sm truncate">{partner.name}</p>
-                                <p className="text-xs text-muted-foreground truncate">{partner.phone}</p>
-                              </div>
-                            </div>
-                          </td>
-                          <td className="py-3 px-2 sm:px-4">
-                            <Badge variant={partner.status === 'active' ? "success" : "destructive"} className="capitalize text-xs whitespace-nowrap">
-                              {partner.status === 'active' ? (
-                                <Check className="h-3 w-3 mr-1" />
-                              ) : (
-                                <X className="h-3 w-3 mr-1" />
-                              )}
-                              {partner.status}
-                            </Badge>
-                          </td>
-                          <td className="py-3 px-2 sm:px-4 capitalize text-xs sm:text-sm whitespace-nowrap">{partner.role}</td>
-                          <td className="py-3 px-2 sm:px-4 text-xs sm:text-sm">{partner.ordersCompleted}</td>
-                          <td className="hidden sm:table-cell py-3 px-2 sm:px-4 text-xs sm:text-sm whitespace-nowrap">
-                            {partner.paymentType === 'commission' 
-                              ? `${partner.paymentValue}% Commission` 
-                              : `₹${partner.paymentValue} Fixed`}
-                          </td>
-                          <td className="py-3 px-2 sm:px-4 text-xs sm:text-sm font-medium">₹{partner.balance}</td>
-                          <td className="py-3 px-2 sm:px-4">
-                            <DropdownMenu>
-                              <DropdownMenuTrigger asChild>
-                                <Button variant="ghost" size="icon" className="h-7 w-7 sm:h-8 sm:w-8">
-                                  <MoreHorizontal className="h-4 w-4" />
-                                  <span className="sr-only">Open menu</span>
-                                </Button>
-                              </DropdownMenuTrigger>
-                              <DropdownMenuContent align="end" className="w-[180px]">
-                                <DropdownMenuItem>Edit Partner</DropdownMenuItem>
-                                <DropdownMenuItem>
-                                  <Wallet className="h-4 w-4 mr-2" />
-                                  Transfer Funds
-                                </DropdownMenuItem>
-                                <DropdownMenuItem className="text-destructive">
-                                  {partner.status === 'active' ? 'Deactivate' : 'Activate'}
-                                </DropdownMenuItem>
-                              </DropdownMenuContent>
-                            </DropdownMenu>
-                          </td>
+                {isLoading ? (
+                  <div className="flex justify-center items-center py-12">
+                    <div className="text-center">
+                      <RefreshCw className="h-8 w-8 animate-spin mx-auto text-muted-foreground" />
+                      <p className="mt-2 text-muted-foreground">Loading partners...</p>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="w-full">
+                      <thead>
+                        <tr className="border-b border-border text-left">
+                          <th className="py-3 px-4 font-medium text-muted-foreground text-xs sm:text-sm">Partner</th>
+                          <th className="py-3 px-2 sm:px-4 font-medium text-muted-foreground text-xs sm:text-sm">Status</th>
+                          <th className="py-3 px-2 sm:px-4 font-medium text-muted-foreground text-xs sm:text-sm">Email</th>
+                          <th className="py-3 px-2 sm:px-4 font-medium text-muted-foreground text-xs sm:text-sm">Orders</th>
+                          <th className="hidden sm:table-cell py-3 px-2 sm:px-4 font-medium text-muted-foreground text-xs sm:text-sm">Payment</th>
+                          <th className="py-3 px-2 sm:px-4 font-medium text-muted-foreground text-xs sm:text-sm">Balance</th>
+                          <th className="py-3 px-2 sm:px-4 font-medium text-muted-foreground text-xs sm:text-sm w-10"></th>
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
+                      </thead>
+                      <tbody>
+                        {filteredPartners.length === 0 ? (
+                          <tr>
+                            <td colSpan={7} className="py-8 text-center text-muted-foreground">
+                              No partners found. Add a new partner to get started.
+                            </td>
+                          </tr>
+                        ) : (
+                          filteredPartners.map((partnerData) => (
+                            <tr key={partnerData.relationshipId} className="border-b border-border hover:bg-muted/50">
+                              <td className="py-3 px-4">
+                                <div className="flex items-center gap-2 sm:gap-3">
+                                  <Avatar className="h-7 w-7 sm:h-8 sm:w-8">
+                                    <AvatarFallback className="bg-primary/10 text-primary text-xs sm:text-sm">
+                                      {partnerData.partner.fullName.charAt(0)}
+                                    </AvatarFallback>
+                                  </Avatar>
+                                  <div className="min-w-0">
+                                    <p className="font-medium text-sm truncate">{partnerData.partner.fullName}</p>
+                                    <p className="text-xs text-muted-foreground truncate">{partnerData.partner.phone}</p>
+                                  </div>
+                                </div>
+                              </td>
+                              <td className="py-3 px-2 sm:px-4">
+                                <Badge variant={partnerData.status === 'ACTIVE' ? "success" : "destructive"} className="capitalize text-xs whitespace-nowrap">
+                                  {partnerData.status === 'ACTIVE' ? (
+                                    <Check className="h-3 w-3 mr-1" />
+                                  ) : (
+                                    <X className="h-3 w-3 mr-1" />
+                                  )}
+                                  {partnerData.status.toLowerCase()}
+                                </Badge>
+                              </td>
+                              <td className="py-3 px-2 sm:px-4 text-xs sm:text-sm">{partnerData.partner.email}</td>
+                              <td className="py-3 px-2 sm:px-4 text-xs sm:text-sm">-</td>
+                              <td className="hidden sm:table-cell py-3 px-2 sm:px-4 text-xs sm:text-sm whitespace-nowrap">
+                                {partnerData.commissionType === 'PERCENTAGE' 
+                                  ? `${partnerData.commissionRate}% Commission` 
+                                  : `₹${partnerData.commissionRate} Fixed`}
+                              </td>
+                              <td className="py-3 px-2 sm:px-4 text-xs sm:text-sm font-medium">₹{partnerData.partner.wallet || 0}</td>
+                              <td className="py-3 px-2 sm:px-4">
+                                <DropdownMenu>
+                                  <DropdownMenuTrigger asChild>
+                                    <Button variant="ghost" size="icon" className="h-7 w-7 sm:h-8 sm:w-8">
+                                      <MoreHorizontal className="h-4 w-4" />
+                                      <span className="sr-only">Open menu</span>
+                                    </Button>
+                                  </DropdownMenuTrigger>
+                                  <DropdownMenuContent align="end" className="w-[180px]">
+                                    <DropdownMenuItem>Edit Partner</DropdownMenuItem>
+                                    <DropdownMenuItem>
+                                      <Wallet className="h-4 w-4 mr-2" />
+                                      Transfer Funds
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem 
+                                      className={partnerData.status === 'ACTIVE' ? "text-destructive" : "text-green-600"}
+                                      onClick={() => updatePartnerStatus(
+                                        partnerData.partner._id, 
+                                        partnerData.status === 'ACTIVE' ? 'INACTIVE' : 'ACTIVE'
+                                      )}
+                                    >
+                                      {partnerData.status === 'ACTIVE' ? 'Deactivate' : 'Activate'}
+                                    </DropdownMenuItem>
+                                  </DropdownMenuContent>
+                                </DropdownMenu>
+                              </td>
+                            </tr>
+                          ))
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
               </TabsContent>
               
               <TabsContent value="grid" className="p-4 sm:p-6">
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-                  {filteredPartners.map((partner) => (
-                    <Card key={partner.id} className="overflow-hidden h-full flex flex-col">
-                      <CardContent className="p-0 flex-1 flex flex-col">
-                        <div className="p-4 flex-1">
-                          <div className="flex justify-between items-start">
-                            <div className="flex items-center gap-3">
-                              <Avatar className="h-10 w-10">
-                                <AvatarFallback className="bg-primary/10 text-primary">
-                                  {partner.name.charAt(0)}
-                                </AvatarFallback>
-                              </Avatar>
-                              <div className="min-w-0">
-                                <p className="font-medium truncate">{partner.name}</p>
-                                <p className="text-sm text-muted-foreground truncate">{partner.phone}</p>
+                {isLoading ? (
+                  <div className="flex justify-center items-center py-12">
+                    <div className="text-center">
+                      <RefreshCw className="h-8 w-8 animate-spin mx-auto text-muted-foreground" />
+                      <p className="mt-2 text-muted-foreground">Loading partners...</p>
+                    </div>
+                  </div>
+                ) : filteredPartners.length === 0 ? (
+                  <div className="text-center py-12 text-muted-foreground">
+                    No partners found. Add a new partner to get started.
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                    {filteredPartners.map((partnerData) => (
+                      <Card key={partnerData.relationshipId} className="overflow-hidden h-full flex flex-col">
+                        <CardContent className="p-0 flex-1 flex flex-col">
+                          <div className="p-4 flex-1">
+                            <div className="flex justify-between items-start">
+                              <div className="flex items-center gap-3">
+                                <Avatar className="h-10 w-10">
+                                  <AvatarFallback className="bg-primary/10 text-primary">
+                                    {partnerData.partner.fullName.charAt(0)}
+                                  </AvatarFallback>
+                                </Avatar>
+                                <div className="min-w-0">
+                                  <p className="font-medium truncate">{partnerData.partner.fullName}</p>
+                                  <p className="text-sm text-muted-foreground truncate">{partnerData.partner.phone}</p>
+                                </div>
+                              </div>
+                              <Badge variant={partnerData.status === 'ACTIVE' ? "success" : "destructive"} className="capitalize whitespace-nowrap">
+                                {partnerData.status.toLowerCase()}
+                              </Badge>
+                            </div>
+                            
+                            <div className="mt-4 space-y-2">
+                              <div className="text-sm flex justify-between">
+                                <span className="text-muted-foreground">Email:</span>
+                                <span className="font-medium">{partnerData.partner.email}</span>
+                              </div>
+                              <div className="text-sm flex justify-between">
+                                <span className="text-muted-foreground">Payment:</span>
+                                <span className="font-medium">
+                                  {partnerData.commissionType === 'PERCENTAGE' 
+                                    ? `${partnerData.commissionRate}% Commission` 
+                                    : `₹${partnerData.commissionRate} Fixed`}
+                                </span>
+                              </div>
+                              <div className="text-sm flex justify-between">
+                                <span className="text-muted-foreground">Orders:</span>
+                                <span className="font-medium">-</span>
+                              </div>
+                              <div className="text-sm flex justify-between">
+                                <span className="text-muted-foreground">Balance:</span>
+                                <span className="font-medium">₹{partnerData.partner.wallet || 0}</span>
                               </div>
                             </div>
-                            <Badge variant={partner.status === 'active' ? "success" : "destructive"} className="capitalize whitespace-nowrap">
-                              {partner.status}
-                            </Badge>
                           </div>
                           
-                          <div className="mt-4 space-y-2">
-                            <div className="text-sm flex justify-between">
-                              <span className="text-muted-foreground">Role:</span>
-                              <span className="capitalize font-medium">{partner.role}</span>
-                            </div>
-                            <div className="text-sm flex justify-between">
-                              <span className="text-muted-foreground">Payment:</span>
-                              <span className="font-medium">
-                                {partner.paymentType === 'commission' 
-                                  ? `${partner.paymentValue}% Commission` 
-                                  : `₹${partner.paymentValue} Fixed`}
-                              </span>
-                            </div>
-                            <div className="text-sm flex justify-between">
-                              <span className="text-muted-foreground">Orders:</span>
-                              <span className="font-medium">{partner.ordersCompleted}</span>
-                            </div>
-                            <div className="text-sm flex justify-between">
-                              <span className="text-muted-foreground">Balance:</span>
-                              <span className="font-medium">₹{partner.balance}</span>
-                            </div>
+                          <div className="flex border-t border-border mt-auto">
+                            <Button variant="ghost" className="flex-1 rounded-none py-2 h-10">
+                              Edit
+                            </Button>
+                            <Button variant="ghost" className="flex-1 rounded-none py-2 h-10 border-l border-border">
+                              <Wallet className="h-4 w-4 mr-2" />
+                              Fund
+                            </Button>
                           </div>
-                        </div>
-                        
-                        <div className="flex border-t border-border mt-auto">
-                          <Button variant="ghost" className="flex-1 rounded-none py-2 h-10">
-                            Edit
-                          </Button>
-                          <Button variant="ghost" className="flex-1 rounded-none py-2 h-10 border-l border-border">
-                            <Wallet className="h-4 w-4 mr-2" />
-                            Fund
-                          </Button>
-                        </div>
-                      </CardContent>
-                    </Card>
-                  ))}
-                </div>
+                        </CardContent>
+                      </Card>
+                    ))}
+                  </div>
+                )}
               </TabsContent>
             </Tabs>
           </CardContent>

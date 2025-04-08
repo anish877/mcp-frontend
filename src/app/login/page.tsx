@@ -1,5 +1,6 @@
+"use client";
 import React, { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import Link from 'next/link';
 import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useForm } from 'react-hook-form';
@@ -9,6 +10,9 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
+import { useRouter } from 'next/navigation';
+import axios from "axios";
+import { BACKEND_URL } from '@/config';
 
 const loginSchema = z.object({
   email: z.string().email({ message: 'Please enter a valid email address' }),
@@ -18,9 +22,10 @@ const loginSchema = z.object({
 type LoginFormValues = z.infer<typeof loginSchema>;
 
 export default function Login() {
-  const navigate = useNavigate();
+  const router = useRouter();
   const { toast } = useToast();
   const [showPassword, setShowPassword] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   
   const form = useForm<LoginFormValues>({
     resolver: zodResolver(loginSchema),
@@ -30,17 +35,46 @@ export default function Login() {
     },
   });
 
-  function onSubmit(data: LoginFormValues) {
-    // This is a demo login - in a real app, this would connect to an auth service
-    console.log('Login submitted:', data);
-    
-    toast({
-      title: 'Login Successful',
-      description: 'Welcome back to MCP Nexus.',
-    });
-    
-    // Navigate to dashboard after login
-    navigate('/');
+  async function onSubmit(data: LoginFormValues) {
+    try {
+      setIsSubmitting(true);
+      
+      const response = await axios.post(
+        `${BACKEND_URL}/auth/login`, 
+        data,
+        { withCredentials: true } // Important for receiving cookies
+      );
+      if (response.data.token) {
+        localStorage.setItem('authToken', response.data.token);
+      }
+      
+      toast({
+        title: 'Login Successful',
+        description: 'Welcome back to MCP Nexus.',
+      });
+      
+      router.push('/dashboard');
+    } catch (error) {
+      console.error("Login error:", error);
+      
+      // Handle different error responses
+      if (axios.isAxiosError(error) && error.response) {
+        const errorMessage = error.response.data.message || 'Login failed';
+        toast({
+          title: 'Login Error',
+          description: errorMessage,
+          variant: 'destructive',
+        });
+      } else {
+        toast({
+          title: 'Login Error',
+          description: 'An unexpected error occurred. Please try again.',
+          variant: 'destructive',
+        });
+      }
+    } finally {
+      setIsSubmitting(false);
+    }
   }
 
   return (
@@ -70,6 +104,7 @@ export default function Login() {
                         <Input
                           placeholder="email@example.com"
                           className="pl-10"
+                          type="email"
                           {...field}
                         />
                       </FormControl>
@@ -115,8 +150,25 @@ export default function Login() {
                 )}
               />
               
-              <Button type="submit" className="w-full" size="lg">
-                <LogIn className="mr-2 h-4 w-4" /> Sign In
+              <Button 
+                type="submit" 
+                className="w-full" 
+                size="lg"
+                disabled={isSubmitting}
+              >
+                {isSubmitting ? (
+                  <span className="flex items-center">
+                    <svg className="animate-spin -ml-1 mr-3 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+                    </svg>
+                    Signing In...
+                  </span>
+                ) : (
+                  <span className="flex items-center">
+                    <LogIn className="mr-2 h-4 w-4" /> Sign In
+                  </span>
+                )}
               </Button>
             </form>
           </Form>
@@ -125,7 +177,7 @@ export default function Login() {
         <CardFooter className="flex flex-col space-y-2">
           <div className="text-center text-sm text-muted-foreground">
             <span className="mr-1">Don't have an account?</span>
-            <Link to="/signup" className="underline text-primary hover:text-primary/90">
+            <Link href="/signup" className="underline text-primary hover:text-primary/90">
               Sign up
             </Link>
           </div>
