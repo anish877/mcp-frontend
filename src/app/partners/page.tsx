@@ -14,7 +14,9 @@ import {
   MoreHorizontal, 
   Filter,
   RefreshCw,
-  Wallet 
+  Wallet,
+  Edit,
+  Trash2
 } from 'lucide-react';
 import {
   DropdownMenu,
@@ -29,6 +31,7 @@ import {
   DialogHeader,
   DialogTitle,
   DialogTrigger,
+  DialogFooter,
 } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 import { 
@@ -39,6 +42,16 @@ import {
   SelectValue 
 } from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { BACKEND_URL } from '@/config';
 import axios from 'axios';
 import { toast } from '@/hooks/use-toast';
@@ -70,7 +83,16 @@ interface PartnerFormData {
   commissionType: 'PERCENTAGE' | 'FIXED';
 }
 
-const initialFormState: PartnerFormData = {
+// Form data for editing a partner
+interface EditPartnerFormData {
+  fullName?: string;
+  phone?: string;
+  commissionRate?: number;
+  commissionType?: 'PERCENTAGE' | 'FIXED';
+  status?: 'ACTIVE' | 'INACTIVE';
+}
+
+const initialAddFormState: PartnerFormData = {
   fullName: '',
   email: '',
   password: '',
@@ -79,14 +101,27 @@ const initialFormState: PartnerFormData = {
   commissionType: 'FIXED'
 };
 
+const initialEditFormState: EditPartnerFormData = {
+  fullName: '',
+  phone: '',
+  commissionRate: 0,
+  commissionType: 'FIXED',
+  status: 'ACTIVE'
+};
+
 const Partners = () => {
   const [isAddPartnerOpen, setIsAddPartnerOpen] = useState(false);
+  const [isEditPartnerOpen, setIsEditPartnerOpen] = useState(false);
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [filter, setFilter] = useState<'all' | 'ACTIVE' | 'INACTIVE'>('all');
   const [searchTerm, setSearchTerm] = useState('');
   const [partners, setPartners] = useState<Partner[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [formData, setFormData] = useState<PartnerFormData>(initialFormState);
+  const [addFormData, setAddFormData] = useState<PartnerFormData>(initialAddFormState);
+  const [editFormData, setEditFormData] = useState<EditPartnerFormData>(initialEditFormState);
+  const [selectedPartnerId, setSelectedPartnerId] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [selectedPartnerDetails, setSelectedPartnerDetails] = useState<Partner | null>(null);
 
   // Fetch partners from backend
   const fetchPartners = async () => {
@@ -103,6 +138,22 @@ const Partners = () => {
       });
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  // Fetch single partner details
+  const fetchPartnerDetails = async (partnerId: string) => {
+    try {
+      const response = await axios.get(`${BACKEND_URL}/partners/${partnerId}`, { withCredentials: true });
+      return response.data.data;
+    } catch (error) {
+      console.error('Error fetching partner details:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to load partner details.',
+        variant: 'destructive',
+      });
+      return null;
     }
   };
 
@@ -125,20 +176,45 @@ const Partners = () => {
     return true;
   });
 
-  // Handle form input changes
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  // Handle add form input changes
+  const handleAddInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { id, value } = e.target;
-    setFormData(prev => ({
+    setAddFormData(prev => ({
       ...prev,
       [id]: value
     }));
   };
 
-  // Handle commission type selection
-  const handleCommissionTypeChange = (value: string) => {
-    setFormData(prev => ({
+  // Handle edit form input changes
+  const handleEditInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const { id, value } = e.target;
+    setEditFormData(prev => ({
+      ...prev,
+      [id]: value
+    }));
+  };
+
+  // Handle commission type selection for add form
+  const handleAddCommissionTypeChange = (value: string) => {
+    setAddFormData(prev => ({
       ...prev,
       commissionType: value as 'PERCENTAGE' | 'FIXED'
+    }));
+  };
+
+  // Handle commission type selection for edit form
+  const handleEditCommissionTypeChange = (value: string) => {
+    setEditFormData(prev => ({
+      ...prev,
+      commissionType: value as 'PERCENTAGE' | 'FIXED'
+    }));
+  };
+  
+  // Handle status change for edit form
+  const handleEditStatusChange = (value: string) => {
+    setEditFormData(prev => ({
+      ...prev,
+      status: value as 'ACTIVE' | 'INACTIVE'
     }));
   };
 
@@ -146,7 +222,7 @@ const Partners = () => {
   const handleAddPartner = async () => {
     setIsSubmitting(true);
     try {
-      const response = await axios.post(`${BACKEND_URL}/partners`, formData, {
+      const response = await axios.post(`${BACKEND_URL}/partners`, addFormData, {
         withCredentials: true
       });
       
@@ -159,13 +235,116 @@ const Partners = () => {
       fetchPartners();
       
       // Reset form and close dialog
-      setFormData(initialFormState);
+      setAddFormData(initialAddFormState);
       setIsAddPartnerOpen(false);
     } catch (error) {
       console.error('Error adding partner:', error);
       toast({
         title: 'Error',
         description: 'Failed to add partner',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  // Open edit partner dialog and populate form
+  const openEditPartnerDialog = async (partnerId: string) => {
+    try {
+      const partner = partners.find(p => p.partner._id === partnerId);
+      if (partner) {
+        setSelectedPartnerId(partnerId);
+        // Get the latest partner details
+        const details = await fetchPartnerDetails(partnerId);
+        if (details) {
+          setSelectedPartnerDetails(details);
+          setEditFormData({
+            fullName: details.partner.fullName,
+            phone: details.partner.phone,
+            commissionRate: details.relationship.commissionRate,
+            commissionType: details.relationship.commissionType,
+            status: details.relationship.status
+          });
+          setIsEditPartnerOpen(true);
+        }
+      }
+    } catch (error) {
+      console.error('Error opening edit dialog:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to load partner details for editing',
+        variant: 'destructive',
+      });
+    }
+  };
+
+  // Update partner details
+  const handleUpdatePartner = async () => {
+    if (!selectedPartnerId) return;
+    
+    setIsSubmitting(true);
+    try {
+      await axios.put(`${BACKEND_URL}/partners/${selectedPartnerId}`, editFormData, {
+        withCredentials: true
+      });
+      
+      toast({
+        title: 'Success',
+        description: 'Partner updated successfully',
+      });
+      
+      // Refresh partner list
+      fetchPartners();
+      
+      // Reset form and close dialog
+      setEditFormData(initialEditFormState);
+      setIsEditPartnerOpen(false);
+      setSelectedPartnerId(null);
+    } catch (error) {
+      console.error('Error updating partner:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to update partner',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  // Open delete confirmation dialog
+  const openDeleteDialog = (partnerId: string) => {
+    setSelectedPartnerId(partnerId);
+    setIsDeleteDialogOpen(true);
+  };
+
+  // Delete partner
+  const handleDeletePartner = async () => {
+    if (!selectedPartnerId) return;
+    
+    setIsSubmitting(true);
+    try {
+      await axios.delete(`${BACKEND_URL}/partners/${selectedPartnerId}`, {
+        withCredentials: true
+      });
+      
+      toast({
+        title: 'Success',
+        description: 'Partner removed successfully',
+      });
+      
+      // Refresh partner list
+      fetchPartners();
+      
+      // Close dialog
+      setIsDeleteDialogOpen(false);
+      setSelectedPartnerId(null);
+    } catch (error) {
+      console.error('Error deleting partner:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to remove partner',
         variant: 'destructive',
       });
     } finally {
@@ -206,6 +385,7 @@ const Partners = () => {
             <p className="text-muted-foreground mt-1">Manage your collection partners</p>
           </div>
           
+          {/* Add Partner Dialog */}
           <Dialog open={isAddPartnerOpen} onOpenChange={setIsAddPartnerOpen}>
             <DialogTrigger asChild>
               <Button>
@@ -228,8 +408,8 @@ const Partners = () => {
                   <Input 
                     id="fullName" 
                     className="col-span-3" 
-                    value={formData.fullName}
-                    onChange={handleInputChange}
+                    value={addFormData.fullName}
+                    onChange={handleAddInputChange}
                   />
                 </div>
                 <div className="grid grid-cols-4 items-center gap-4">
@@ -240,8 +420,8 @@ const Partners = () => {
                     id="email" 
                     type="email"
                     className="col-span-3"
-                    value={formData.email}
-                    onChange={handleInputChange}
+                    value={addFormData.email}
+                    onChange={handleAddInputChange}
                   />
                 </div>
                 <div className="grid grid-cols-4 items-center gap-4">
@@ -252,8 +432,8 @@ const Partners = () => {
                     id="password" 
                     type="password"
                     className="col-span-3"
-                    value={formData.password}
-                    onChange={handleInputChange}
+                    value={addFormData.password}
+                    onChange={handleAddInputChange}
                   />
                 </div>
                 <div className="grid grid-cols-4 items-center gap-4">
@@ -263,8 +443,8 @@ const Partners = () => {
                   <Input 
                     id="phone" 
                     className="col-span-3"
-                    value={formData.phone}
-                    onChange={handleInputChange}
+                    value={addFormData.phone}
+                    onChange={handleAddInputChange}
                   />
                 </div>
                 <div className="grid grid-cols-4 items-center gap-4">
@@ -273,8 +453,8 @@ const Partners = () => {
                   </Label>
                   <div className="col-span-3 flex gap-2">
                     <Select 
-                      value={formData.commissionType}
-                      onValueChange={handleCommissionTypeChange}
+                      value={addFormData.commissionType}
+                      onValueChange={handleAddCommissionTypeChange}
                     >
                       <SelectTrigger className="w-[130px]">
                         <SelectValue />
@@ -288,8 +468,8 @@ const Partners = () => {
                       id="commissionRate"
                       type="number" 
                       placeholder="Value" 
-                      value={formData.commissionRate}
-                      onChange={handleInputChange}
+                      value={addFormData.commissionRate}
+                      onChange={handleAddInputChange}
                     />
                   </div>
                 </div>
@@ -307,6 +487,119 @@ const Partners = () => {
               </div>
             </DialogContent>
           </Dialog>
+          
+          {/* Edit Partner Dialog */}
+          <Dialog open={isEditPartnerOpen} onOpenChange={setIsEditPartnerOpen}>
+            <DialogContent className="sm:max-w-[425px]">
+              <DialogHeader>
+                <DialogTitle>Edit Partner</DialogTitle>
+                <DialogDescription>
+                  Update the details of your pickup partner.
+                </DialogDescription>
+              </DialogHeader>
+              <div className="grid gap-4 py-4">
+                <div className="grid grid-cols-4 items-center gap-4">
+                  <Label htmlFor="fullName" className="text-right">
+                    Name
+                  </Label>
+                  <Input 
+                    id="fullName" 
+                    className="col-span-3" 
+                    value={editFormData.fullName}
+                    onChange={handleEditInputChange}
+                  />
+                </div>
+                <div className="grid grid-cols-4 items-center gap-4">
+                  <Label htmlFor="phone" className="text-right">
+                    Phone
+                  </Label>
+                  <Input 
+                    id="phone" 
+                    className="col-span-3"
+                    value={editFormData.phone}
+                    onChange={handleEditInputChange}
+                  />
+                </div>
+                <div className="grid grid-cols-4 items-center gap-4">
+                  <Label htmlFor="payment" className="text-right">
+                    Payment
+                  </Label>
+                  <div className="col-span-3 flex gap-2">
+                    <Select 
+                      value={editFormData.commissionType}
+                      onValueChange={handleEditCommissionTypeChange}
+                    >
+                      <SelectTrigger className="w-[130px]">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="PERCENTAGE">Percentage</SelectItem>
+                        <SelectItem value="FIXED">Fixed</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <Input 
+                      id="commissionRate"
+                      type="number" 
+                      placeholder="Value" 
+                      value={editFormData.commissionRate}
+                      onChange={handleEditInputChange}
+                    />
+                  </div>
+                </div>
+                <div className="grid grid-cols-4 items-center gap-4">
+                  <Label htmlFor="status" className="text-right">
+                    Status
+                  </Label>
+                  <Select 
+                    value={editFormData.status}
+                    onValueChange={handleEditStatusChange}
+                  >
+                    <SelectTrigger className="col-span-3">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="ACTIVE">Active</SelectItem>
+                      <SelectItem value="INACTIVE">Inactive</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setIsEditPartnerOpen(false)}>
+                  Cancel
+                </Button>
+                <Button 
+                  onClick={handleUpdatePartner} 
+                  disabled={isSubmitting}
+                >
+                  {isSubmitting ? 'Updating...' : 'Update Partner'}
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+          
+          {/* Delete Partner Dialog */}
+          <AlertDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  This action will permanently remove the partner from your list.
+                  This action cannot be undone.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                <AlertDialogAction 
+                  onClick={handleDeletePartner}
+                  disabled={isSubmitting}
+                  className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                >
+                  {isSubmitting ? 'Deleting...' : 'Delete Partner'}
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
         </div>
         
         <Card className="overflow-hidden">
@@ -351,6 +644,7 @@ const Partners = () => {
                   onClick={() => {
                     setFilter('all');
                     setSearchTerm('');
+                    fetchPartners();
                   }}
                 >
                   <RefreshCw className="h-4 w-4 mr-2" />
@@ -438,7 +732,10 @@ const Partners = () => {
                                     </Button>
                                   </DropdownMenuTrigger>
                                   <DropdownMenuContent align="end" className="w-[180px]">
-                                    <DropdownMenuItem>Edit Partner</DropdownMenuItem>
+                                    <DropdownMenuItem onClick={() => openEditPartnerDialog(partnerData.partner._id)}>
+                                      <Edit className="h-4 w-4 mr-2" />
+                                      Edit Partner
+                                    </DropdownMenuItem>
                                     <DropdownMenuItem>
                                       <Wallet className="h-4 w-4 mr-2" />
                                       Transfer Funds
@@ -451,6 +748,13 @@ const Partners = () => {
                                       )}
                                     >
                                       {partnerData.status === 'ACTIVE' ? 'Deactivate' : 'Activate'}
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem 
+                                      className="text-destructive focus:text-destructive focus:bg-destructive/10"
+                                      onClick={() => openDeleteDialog(partnerData.partner._id)}
+                                    >
+                                      <Trash2 className="h-4 w-4 mr-2" />
+                                      Delete Partner
                                     </DropdownMenuItem>
                                   </DropdownMenuContent>
                                 </DropdownMenu>
@@ -482,55 +786,82 @@ const Partners = () => {
                       <Card key={partnerData.relationshipId} className="overflow-hidden h-full flex flex-col">
                         <CardContent className="p-0 flex-1 flex flex-col">
                           <div className="p-4 flex-1">
-                            <div className="flex justify-between items-start">
+                          <div className="flex justify-between items-start">
                               <div className="flex items-center gap-3">
                                 <Avatar className="h-10 w-10">
                                   <AvatarFallback className="bg-primary/10 text-primary">
                                     {partnerData.partner.fullName.charAt(0)}
                                   </AvatarFallback>
                                 </Avatar>
-                                <div className="min-w-0">
-                                  <p className="font-medium truncate">{partnerData.partner.fullName}</p>
-                                  <p className="text-sm text-muted-foreground truncate">{partnerData.partner.phone}</p>
+                                <div>
+                                  <h3 className="font-medium">{partnerData.partner.fullName}</h3>
+                                  <p className="text-xs text-muted-foreground">{partnerData.partner.phone}</p>
                                 </div>
                               </div>
-                              <Badge variant={partnerData.status === 'ACTIVE' ? "success" : "destructive"} className="capitalize whitespace-nowrap">
+                              <Badge variant={partnerData.status === 'ACTIVE' ? "success" : "destructive"} className="capitalize">
                                 {partnerData.status.toLowerCase()}
                               </Badge>
                             </div>
                             
-                            <div className="mt-4 space-y-2">
-                              <div className="text-sm flex justify-between">
-                                <span className="text-muted-foreground">Email:</span>
-                                <span className="font-medium">{partnerData.partner.email}</span>
+                            <div className="mt-4 space-y-3">
+                              <div className="flex justify-between">
+                                <span className="text-sm text-muted-foreground">Email</span>
+                                <span className="text-sm font-medium truncate max-w-[150px]">
+                                  {partnerData.partner.email}
+                                </span>
                               </div>
-                              <div className="text-sm flex justify-between">
-                                <span className="text-muted-foreground">Payment:</span>
-                                <span className="font-medium">
+                              <div className="flex justify-between">
+                                <span className="text-sm text-muted-foreground">Payment</span>
+                                <span className="text-sm font-medium">
                                   {partnerData.commissionType === 'PERCENTAGE' 
                                     ? `${partnerData.commissionRate}% Commission` 
                                     : `₹${partnerData.commissionRate} Fixed`}
                                 </span>
                               </div>
-                              <div className="text-sm flex justify-between">
-                                <span className="text-muted-foreground">Orders:</span>
-                                <span className="font-medium">-</span>
-                              </div>
-                              <div className="text-sm flex justify-between">
-                                <span className="text-muted-foreground">Balance:</span>
-                                <span className="font-medium">₹{partnerData.partner.wallet || 0}</span>
+                              <div className="flex justify-between">
+                                <span className="text-sm text-muted-foreground">Balance</span>
+                                <span className="text-sm font-medium">₹{partnerData.partner.wallet || 0}</span>
                               </div>
                             </div>
                           </div>
                           
-                          <div className="flex border-t border-border mt-auto">
-                            <Button variant="ghost" className="flex-1 rounded-none py-2 h-10">
-                              Edit
-                            </Button>
-                            <Button variant="ghost" className="flex-1 rounded-none py-2 h-10 border-l border-border">
-                              <Wallet className="h-4 w-4 mr-2" />
-                              Fund
-                            </Button>
+                          <div className="border-t border-border mt-4">
+                            <div className="flex items-center justify-end p-4 gap-2">
+                              <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                  <Button variant="outline" size="sm">
+                                    <MoreHorizontal className="h-4 w-4 mr-2" />
+                                    Actions
+                                  </Button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="end" className="w-[180px]">
+                                  <DropdownMenuItem onClick={() => openEditPartnerDialog(partnerData.partner._id)}>
+                                    <Edit className="h-4 w-4 mr-2" />
+                                    Edit Partner
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem>
+                                    <Wallet className="h-4 w-4 mr-2" />
+                                    Transfer Funds
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem 
+                                    className={partnerData.status === 'ACTIVE' ? "text-destructive" : "text-green-600"}
+                                    onClick={() => updatePartnerStatus(
+                                      partnerData.partner._id, 
+                                      partnerData.status === 'ACTIVE' ? 'INACTIVE' : 'ACTIVE'
+                                    )}
+                                  >
+                                    {partnerData.status === 'ACTIVE' ? 'Deactivate' : 'Activate'}
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem 
+                                    className="text-destructive focus:text-destructive focus:bg-destructive/10"
+                                    onClick={() => openDeleteDialog(partnerData.partner._id)}
+                                  >
+                                    <Trash2 className="h-4 w-4 mr-2" />
+                                    Delete Partner
+                                  </DropdownMenuItem>
+                                </DropdownMenuContent>
+                              </DropdownMenu>
+                            </div>
                           </div>
                         </CardContent>
                       </Card>
