@@ -10,16 +10,51 @@ import { ShoppingBag, TrendingUp, Clock, Backpack } from 'lucide-react';
 import { useIsMobile } from '@/hooks/use-mobile';
 import axios from 'axios';
 import { BACKEND_URL } from '@/config';
+import { useRouter } from 'next/navigation';
 
 const Dashboard = () => {
   const isMobile = useIsMobile();
   const [balance,setBalance] = useState(0)
+  const [transactions, setTransactions] = useState([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const router = useRouter();
+
+  useEffect(() => {
+    fetchRecentTransactions();
+  }, []);
+
+  const fetchRecentTransactions = async () => {
+    setIsLoading(true);
+    try {
+      const params = new URLSearchParams();
+      params.append('page', '1');
+      params.append('limit', '5');
+      
+      const response = await axios.get(`${BACKEND_URL}/wallet/transaction?${params.toString()}`, {
+        withCredentials: true
+      });
+      
+      if (response.data.success) {
+        setTransactions(response.data.data.transactions);
+      }
+    } catch (error) {
+      console.error("Error fetching recent transactions:", error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleViewAll = (transactionId: any) => {
+    if (transactionId) {
+      router.push(`/wallet?transaction=${transactionId}`);
+    } else {
+      router.push('/wallet');
+    }
+  };
   useEffect(()=>{
     const fetchDashboard = async ()=>{
     const walletbalance  = await axios.get(BACKEND_URL+"/wallet/balance",{withCredentials:true})
-    const orderDetails = await axios.get(BACKEND_URL+"/order",{withCredentials:true})
     setBalance(walletbalance.data.data.balance)
-    console.log(walletbalance,orderDetails)
     }
     fetchDashboard()
   },[])
@@ -58,7 +93,12 @@ const Dashboard = () => {
 
         <div className={`grid ${isMobile ? 'grid-cols-1' : 'grid-cols-1 lg:grid-cols-2'} gap-6`}>
           <OrdersChart />
-          <RecentTransactions />
+          <RecentTransactions 
+            transactions={transactions} 
+            loading={isLoading}
+            maxItems={5}
+            onViewAll={handleViewAll} 
+            />
         </div>
 
         <PartnersList />

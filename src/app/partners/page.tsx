@@ -16,7 +16,9 @@ import {
   RefreshCw,
   Wallet,
   Edit,
-  Trash2
+  Trash2,
+  CreditCard,
+  Loader
 } from 'lucide-react';
 import {
   DropdownMenu,
@@ -92,6 +94,13 @@ interface EditPartnerFormData {
   status?: 'ACTIVE' | 'INACTIVE';
 }
 
+// Form data for transferring funds to a partner
+interface TransferFundsFormData {
+  amount: number;
+  notes: string;
+  paymentMethod: 'razorpay' | 'wallet';
+}
+
 const initialAddFormState: PartnerFormData = {
   fullName: '',
   email: '',
@@ -109,19 +118,28 @@ const initialEditFormState: EditPartnerFormData = {
   status: 'ACTIVE'
 };
 
+const initialTransferFormState: TransferFundsFormData = {
+  amount: 0,
+  notes: '',
+  paymentMethod: 'wallet'
+};
+
 const Partners = () => {
   const [isAddPartnerOpen, setIsAddPartnerOpen] = useState(false);
   const [isEditPartnerOpen, setIsEditPartnerOpen] = useState(false);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+  const [isTransferFundsOpen, setIsTransferFundsOpen] = useState(false);
   const [filter, setFilter] = useState<'all' | 'ACTIVE' | 'INACTIVE'>('all');
   const [searchTerm, setSearchTerm] = useState('');
   const [partners, setPartners] = useState<Partner[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [addFormData, setAddFormData] = useState<PartnerFormData>(initialAddFormState);
   const [editFormData, setEditFormData] = useState<EditPartnerFormData>(initialEditFormState);
+  const [transferFormData, setTransferFormData] = useState<TransferFundsFormData>(initialTransferFormState);
   const [selectedPartnerId, setSelectedPartnerId] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [selectedPartnerDetails, setSelectedPartnerDetails] = useState<Partner | null>(null);
+  const [walletBalance, setWalletBalance] = useState(0);
 
   // Fetch partners from backend
   const fetchPartners = async () => {
@@ -138,6 +156,16 @@ const Partners = () => {
       });
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  // Fetch wallet balance
+  const fetchWalletBalance = async () => {
+    try {
+      const response = await axios.get(`${BACKEND_URL}/wallet/balance`, { withCredentials: true });
+      setWalletBalance(response.data.data.balance);
+    } catch (error) {
+      console.error('Error fetching wallet balance:', error);
     }
   };
 
@@ -159,6 +187,17 @@ const Partners = () => {
 
   useEffect(() => {
     fetchPartners();
+    fetchWalletBalance();
+    
+    // Load Razorpay script when component mounts
+    const script = document.createElement('script');
+    script.src = 'https://checkout.razorpay.com/v1/checkout.js';
+    script.async = true;
+    document.body.appendChild(script);
+    
+    return () => {
+      document.body.removeChild(script);
+    };
   }, []);
 
   // Filter partners based on search and status filter
@@ -191,6 +230,23 @@ const Partners = () => {
     setEditFormData(prev => ({
       ...prev,
       [id]: value
+    }));
+  };
+
+  // Handle transfer form input changes
+  const handleTransferInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+    const { id, value } = e.target;
+    setTransferFormData(prev => ({
+      ...prev,
+      [id]: id === 'amount' ? parseFloat(value) || 0 : value
+    }));
+  };
+
+  // Handle payment method selection for transfer form
+  const handlePaymentMethodChange = (value: string) => {
+    setTransferFormData(prev => ({
+      ...prev,
+      paymentMethod: value as 'razorpay' | 'wallet'
     }));
   };
 
@@ -276,6 +332,17 @@ const Partners = () => {
         description: 'Failed to load partner details for editing',
         variant: 'destructive',
       });
+    }
+  };
+
+  // Open transfer funds dialog
+  const openTransferFundsDialog = (partnerId: string) => {
+    const partner = partners.find(p => p.partner._id === partnerId);
+    if (partner) {
+      setSelectedPartnerId(partnerId);
+      setSelectedPartnerDetails(partner);
+      setTransferFormData(initialTransferFormState);
+      setIsTransferFundsOpen(true);
     }
   };
 
@@ -373,6 +440,171 @@ const Partners = () => {
         description: 'Failed to update partner status',
         variant: 'destructive',
       });
+    }
+  };
+
+  // Transfer funds to partner via wallet
+  const handleWalletTransfer = async () => {
+    if (!selectedPartnerId || !transferFormData.amount || transferFormData.amount <= 0) {
+      toast({
+        title: 'Invalid Amount',
+        description: 'Please enter a valid amount greater than zero',
+        variant: 'destructive'
+      });
+      return;
+    }
+
+    setIsSubmitting(true);
+    try {
+      await axios.post(`${BACKEND_URL}/wallet/transfer`, {
+        partnerId: selectedPartnerId,
+        amount: transferFormData.amount,
+        notes: transferFormData.notes
+      }, {
+        withCredentials: true
+      });
+      
+      toast({
+        title: 'Transfer Successful',
+        description: `₹${transferFormData.amount} has been transferred to the partner`,
+      });
+      
+      // Refresh partner list and wallet balance
+      fetchPartners();
+      fetchWalletBalance();
+      
+      // Reset form and close dialog
+      setTransferFormData(initialTransferFormState);
+      setIsTransferFundsOpen(false);
+      setSelectedPartnerId(null);
+    } catch (error) {
+      console.error('Error transferring funds:', error);
+      toast({
+        title: 'Transfer Failed',
+        description: 'Failed to transfer funds. Please try again.',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  // Process Razorpay payment for partner funds transfer
+  const handleRazorpayTransfer = async () => {
+    if (!selectedPartnerId || !transferFormData.amount || transferFormData.amount <= 0) {
+      toast({
+        title: 'Invalid Amount',
+        description: 'Please enter a valid amount greater than zero',
+        variant: 'destructive'
+      });
+      return;
+    }
+    
+    setIsSubmitting(true);
+    
+    try {
+      // Step 1: Create Razorpay order for partner funding
+      const orderResponse = await axios.post(
+        `${BACKEND_URL}/wallet/razorpay/create-order`, 
+        { 
+          partnerId: selectedPartnerId,
+          amount: transferFormData.amount,
+          notes: transferFormData.notes
+        }, 
+        { withCredentials: true }
+      );
+      
+      const { orderId, key, amount: amountInPaise, currency, transactionId, user } = orderResponse.data.data;
+      
+      // Step 2: Open Razorpay checkout
+      const options = {
+        key,
+        amount: amountInPaise,
+        currency,
+        name: "MCP Nexus",
+        description: `Fund Transfer to ${selectedPartnerDetails?.partner.fullName}`,
+        order_id: orderId,
+        prefill: {
+          name: user.name,
+          email: user.email,
+          contact: user.contact
+        },
+        theme: {
+          color: "#3399cc"
+        },
+        handler: async function(response: any) {
+          try {
+            // Step 3: Verify payment
+            const paymentData = {
+              razorpay_order_id: response.razorpay_order_id,
+              razorpay_payment_id: response.razorpay_payment_id,
+              razorpay_signature: response.razorpay_signature,
+              transactionId,
+              partnerId: selectedPartnerId
+            };
+            
+            const verifyResponse = await axios.post(
+              `${BACKEND_URL}/wallet/razorpay/verify-payment`,
+              paymentData,
+              { withCredentials: true }
+            );
+            
+            if (verifyResponse.data.success) {
+              toast({
+                title: "Payment Successful",
+                description: `₹${transferFormData.amount} has been transferred to ${selectedPartnerDetails?.partner.fullName}`,
+                variant: "success"
+              });
+              
+              // Refresh partner list
+              fetchPartners();
+              
+              // Close dialog and reset form
+              setIsTransferFundsOpen(false);
+              setTransferFormData(initialTransferFormState);
+              setSelectedPartnerId(null);
+            }
+          } catch (error) {
+            console.error("Payment verification error:", error);
+            toast({
+              title: "Payment Verification Failed",
+              description: "There was an issue verifying your payment",
+              variant: "destructive"
+            });
+          }
+        },
+        modal: {
+          ondismiss: function() {
+            toast({
+              title: "Payment Cancelled",
+              description: "You cancelled the payment process",
+              variant: "default"
+            });
+            setIsSubmitting(false);
+          }
+        }
+      };
+      
+      const rzp = new (window as any).Razorpay(options);
+      rzp.open();
+    } catch (error) {
+      console.error("Error creating Razorpay order:", error);
+      toast({
+        title: "Error",
+        description: "Failed to process payment request",
+        variant: "destructive"
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  // Handle transfer funds based on selected payment method
+  const handleTransferFunds = () => {
+    if (transferFormData.paymentMethod === 'wallet') {
+      handleWalletTransfer();
+    } else {
+      handleRazorpayTransfer();
     }
   };
 
@@ -578,14 +810,116 @@ const Partners = () => {
             </DialogContent>
           </Dialog>
           
-          {/* Delete Partner Dialog */}
+          {/* Transfer Funds Dialog */}
+          <Dialog open={isTransferFundsOpen} onOpenChange={setIsTransferFundsOpen}>
+            <DialogContent className="sm:max-w-[425px]">
+              <DialogHeader>
+                <DialogTitle>Transfer Funds</DialogTitle>
+                <DialogDescription>
+                  Send funds to {selectedPartnerDetails?.partner.fullName}
+                </DialogDescription>
+              </DialogHeader>
+              <div className="grid gap-4 py-4">
+                <div className="p-3 border border-border rounded-lg bg-muted/50 mb-2">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Avatar className="h-10 w-10">
+                        <AvatarFallback className="bg-primary/10 text-primary">
+                          {selectedPartnerDetails?.partner.fullName.charAt(0) || 'P'}
+                        </AvatarFallback>
+                      </Avatar>
+                      <div>
+                        <p className="font-medium">{selectedPartnerDetails?.partner.fullName}</p>
+                        <p className="text-xs text-muted-foreground">{selectedPartnerDetails?.partner.phone}</p>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-sm">Current Balance</p>
+                      <p className="font-medium">₹{selectedPartnerDetails?.partner.wallet || 0}</p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-4 items-center gap-4">
+                  <Label htmlFor="amount" className="text-right">
+                    Amount
+                  </Label>
+                  <div className="col-span-3 relative">
+                    <span className="absolute left-3 top-2 text-muted-foreground">₹</span>
+                    <Input 
+                      id="amount" 
+                      type="number"
+                      className="pl-7" 
+                      placeholder="Enter amount"
+                      value={transferFormData.amount || ''}
+                      onChange={handleTransferInputChange}
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-4 items-center gap-4">
+                  <Label htmlFor="paymentMethod" className="text-right">
+                    Pay using
+                  </Label>
+                  <Select 
+                    value={transferFormData.paymentMethod}
+                    onValueChange={handlePaymentMethodChange}
+                  >
+                    <SelectTrigger className="col-span-3">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="wallet">
+                        <div className="flex items-center">
+                          <Wallet className="h-4 w-4 mr-2" />
+                          Wallet Balance (₹{walletBalance})
+                        </div>
+                      </SelectItem>
+                      <SelectItem value="razorpay">
+                        <div className="flex items-center">
+                          <CreditCard className="h-4 w-4 mr-2" />
+                          Razorpay
+                        </div>
+                      </SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="grid grid-cols-4 items-start gap-4">
+                  <Label htmlFor="notes" className="text-right pt-2">
+                    Notes
+                  </Label>
+                  <Input
+                    id="notes"
+                    className="col-span-3"
+                    placeholder="Optional notes"
+                    value={transferFormData.notes}
+                    onChange={handleTransferInputChange}
+                  />
+                </div>
+              </div>
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setIsTransferFundsOpen(false)}>
+                  Cancel
+                </Button>
+                <Button 
+                  onClick={handleTransferFunds} 
+                  disabled={isSubmitting || !transferFormData.amount || transferFormData.amount <= 0}
+                >
+                  {isSubmitting ? 'Processing...' : 'Transfer Funds'}
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+          
+          {/* Delete Partner Confirmation Dialog */}
           <AlertDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
             <AlertDialogContent>
               <AlertDialogHeader>
                 <AlertDialogTitle>Are you sure?</AlertDialogTitle>
                 <AlertDialogDescription>
-                  This action will permanently remove the partner from your list.
-                  This action cannot be undone.
+                  This action cannot be undone. This will permanently delete the partner account
+                  and all associated data.
                 </AlertDialogDescription>
               </AlertDialogHeader>
               <AlertDialogFooter>
@@ -593,285 +927,161 @@ const Partners = () => {
                 <AlertDialogAction 
                   onClick={handleDeletePartner}
                   disabled={isSubmitting}
-                  className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
                 >
-                  {isSubmitting ? 'Deleting...' : 'Delete Partner'}
+                  {isSubmitting ? 'Deleting...' : 'Delete'}
                 </AlertDialogAction>
               </AlertDialogFooter>
             </AlertDialogContent>
           </AlertDialog>
         </div>
         
-        <Card className="overflow-hidden">
-          <CardHeader className="pb-3 px-4 sm:px-6">
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-              <div className="flex items-center flex-1 max-w-sm relative">
-                <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-                <Input 
-                  type="search" 
-                  placeholder="Search partners..." 
-                  className="pl-9" 
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                />
-              </div>
-              
-              <div className="flex flex-wrap items-center gap-2">
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button variant="outline" size="sm" className="h-9">
-                      <Filter className="h-4 w-4 mr-2" />
-                      Filter
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end">
-                    <DropdownMenuItem onClick={() => setFilter('all')}>
-                      All Partners
-                    </DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => setFilter('ACTIVE')}>
-                      Active Partners
-                    </DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => setFilter('INACTIVE')}>
-                      Inactive Partners
-                    </DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
-                
-                <Button 
-                  variant="outline" 
-                  size="sm" 
-                  className="h-9"
-                  onClick={() => {
-                    setFilter('all');
-                    setSearchTerm('');
-                    fetchPartners();
-                  }}
-                >
-                  <RefreshCw className="h-4 w-4 mr-2" />
-                  Reset
-                </Button>
-              </div>
-            </div>
-          </CardHeader>
-          <CardContent className="p-0">
-            <Tabs defaultValue="list" className="w-full">
-              <TabsList className="grid w-full grid-cols-2 rounded-none border-b px-4 sm:px-6">
-                <TabsTrigger value="list">List View</TabsTrigger>
-                <TabsTrigger value="grid">Grid View</TabsTrigger>
-              </TabsList>
-              
-              <TabsContent value="list" className="p-0 sm:p-0">
+        {/* Search and Filter Bar */}
+        <div className="flex flex-col sm:flex-row gap-4">
+          <div className="relative flex-1">
+            <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+            <Input 
+              placeholder="Search partners..." 
+              className="pl-9" 
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+            />
+          </div>
+          <div className="flex items-center gap-2">
+            <Select value={filter} onValueChange={(value) => setFilter(value as any)}>
+              <SelectTrigger className="w-[160px]">
+                <SelectValue placeholder="Status" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Partners</SelectItem>
+                <SelectItem value="ACTIVE">Active Only</SelectItem>
+                <SelectItem value="INACTIVE">Inactive Only</SelectItem>
+              </SelectContent>
+            </Select>
+            <Button variant="outline" size="icon" onClick={() => fetchPartners()}>
+              <RefreshCw className="h-4 w-4" />
+            </Button>
+          </div>
+        </div>
+        
+        {/* Partner List */}
+        <div className="rounded-md border">
+          <div className="relative w-full overflow-auto">
+            <table className="w-full caption-bottom text-sm">
+              <thead className="[&_tr]:border-b">
+                <tr className="border-b transition-colors hover:bg-muted/50 data-[state=selected]:bg-muted">
+                  <th className="h-12 px-4 text-left align-middle font-medium">Partner</th>
+                  <th className="h-12 px-4 text-left align-middle font-medium">Contact</th>
+                  <th className="h-12 px-4 text-left align-middle font-medium">Commission</th>
+                  <th className="h-12 px-4 text-left align-middle font-medium">Balance</th>
+                  <th className="h-12 px-4 text-left align-middle font-medium">Status</th>
+                  <th className="h-12 px-4 text-right align-middle font-medium">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
                 {isLoading ? (
-                  <div className="flex justify-center items-center py-12">
-                    <div className="text-center">
-                      <RefreshCw className="h-8 w-8 animate-spin mx-auto text-muted-foreground" />
-                      <p className="mt-2 text-muted-foreground">Loading partners...</p>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="overflow-x-auto">
-                    <table className="w-full">
-                      <thead>
-                        <tr className="border-b border-border text-left">
-                          <th className="py-3 px-4 font-medium text-muted-foreground text-xs sm:text-sm">Partner</th>
-                          <th className="py-3 px-2 sm:px-4 font-medium text-muted-foreground text-xs sm:text-sm">Status</th>
-                          <th className="py-3 px-2 sm:px-4 font-medium text-muted-foreground text-xs sm:text-sm">Email</th>
-                          <th className="py-3 px-2 sm:px-4 font-medium text-muted-foreground text-xs sm:text-sm">Orders</th>
-                          <th className="hidden sm:table-cell py-3 px-2 sm:px-4 font-medium text-muted-foreground text-xs sm:text-sm">Payment</th>
-                          <th className="py-3 px-2 sm:px-4 font-medium text-muted-foreground text-xs sm:text-sm">Balance</th>
-                          <th className="py-3 px-2 sm:px-4 font-medium text-muted-foreground text-xs sm:text-sm w-10"></th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {filteredPartners.length === 0 ? (
-                          <tr>
-                            <td colSpan={7} className="py-8 text-center text-muted-foreground">
-                              No partners found. Add a new partner to get started.
-                            </td>
-                          </tr>
-                        ) : (
-                          filteredPartners.map((partnerData) => (
-                            <tr key={partnerData.relationshipId} className="border-b border-border hover:bg-muted/50">
-                              <td className="py-3 px-4">
-                                <div className="flex items-center gap-2 sm:gap-3">
-                                  <Avatar className="h-7 w-7 sm:h-8 sm:w-8">
-                                    <AvatarFallback className="bg-primary/10 text-primary text-xs sm:text-sm">
-                                      {partnerData.partner.fullName.charAt(0)}
-                                    </AvatarFallback>
-                                  </Avatar>
-                                  <div className="min-w-0">
-                                    <p className="font-medium text-sm truncate">{partnerData.partner.fullName}</p>
-                                    <p className="text-xs text-muted-foreground truncate">{partnerData.partner.phone}</p>
-                                  </div>
-                                </div>
-                              </td>
-                              <td className="py-3 px-2 sm:px-4">
-                                <Badge variant={partnerData.status === 'ACTIVE' ? "success" : "destructive"} className="capitalize text-xs whitespace-nowrap">
-                                  {partnerData.status === 'ACTIVE' ? (
-                                    <Check className="h-3 w-3 mr-1" />
-                                  ) : (
-                                    <X className="h-3 w-3 mr-1" />
-                                  )}
-                                  {partnerData.status.toLowerCase()}
-                                </Badge>
-                              </td>
-                              <td className="py-3 px-2 sm:px-4 text-xs sm:text-sm">{partnerData.partner.email}</td>
-                              <td className="py-3 px-2 sm:px-4 text-xs sm:text-sm">-</td>
-                              <td className="hidden sm:table-cell py-3 px-2 sm:px-4 text-xs sm:text-sm whitespace-nowrap">
-                                {partnerData.commissionType === 'PERCENTAGE' 
-                                  ? `${partnerData.commissionRate}% Commission` 
-                                  : `₹${partnerData.commissionRate} Fixed`}
-                              </td>
-                              <td className="py-3 px-2 sm:px-4 text-xs sm:text-sm font-medium">₹{partnerData.partner.wallet || 0}</td>
-                              <td className="py-3 px-2 sm:px-4">
-                                <DropdownMenu>
-                                  <DropdownMenuTrigger asChild>
-                                    <Button variant="ghost" size="icon" className="h-7 w-7 sm:h-8 sm:w-8">
-                                      <MoreHorizontal className="h-4 w-4" />
-                                      <span className="sr-only">Open menu</span>
-                                    </Button>
-                                  </DropdownMenuTrigger>
-                                  <DropdownMenuContent align="end" className="w-[180px]">
-                                    <DropdownMenuItem onClick={() => openEditPartnerDialog(partnerData.partner._id)}>
-                                      <Edit className="h-4 w-4 mr-2" />
-                                      Edit Partner
-                                    </DropdownMenuItem>
-                                    <DropdownMenuItem>
-                                      <Wallet className="h-4 w-4 mr-2" />
-                                      Transfer Funds
-                                    </DropdownMenuItem>
-                                    <DropdownMenuItem 
-                                      className={partnerData.status === 'ACTIVE' ? "text-destructive" : "text-green-600"}
-                                      onClick={() => updatePartnerStatus(
-                                        partnerData.partner._id, 
-                                        partnerData.status === 'ACTIVE' ? 'INACTIVE' : 'ACTIVE'
-                                      )}
-                                    >
-                                      {partnerData.status === 'ACTIVE' ? 'Deactivate' : 'Activate'}
-                                    </DropdownMenuItem>
-                                    <DropdownMenuItem 
-                                      className="text-destructive focus:text-destructive focus:bg-destructive/10"
-                                      onClick={() => openDeleteDialog(partnerData.partner._id)}
-                                    >
-                                      <Trash2 className="h-4 w-4 mr-2" />
-                                      Delete Partner
-                                    </DropdownMenuItem>
-                                  </DropdownMenuContent>
-                                </DropdownMenu>
-                              </td>
-                            </tr>
-                          ))
-                        )}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
-              </TabsContent>
-              
-              <TabsContent value="grid" className="p-4 sm:p-6">
-                {isLoading ? (
-                  <div className="flex justify-center items-center py-12">
-                    <div className="text-center">
-                      <RefreshCw className="h-8 w-8 animate-spin mx-auto text-muted-foreground" />
-                      <p className="mt-2 text-muted-foreground">Loading partners...</p>
-                    </div>
-                  </div>
+                  <tr>
+                    <td colSpan={6} className="h-24 text-center">
+                      <div className="flex justify-center items-center h-full">
+                        <Loader className="h-6 w-6 text-primary animate-spin mr-2" />
+                        <span>Loading partners...</span>
+                      </div>
+                    </td>
+                  </tr>
                 ) : filteredPartners.length === 0 ? (
-                  <div className="text-center py-12 text-muted-foreground">
-                    No partners found. Add a new partner to get started.
-                  </div>
+                  <tr>
+                    <td colSpan={6} className="h-24 text-center text-muted-foreground">
+                      No partners found
+                    </td>
+                  </tr>
                 ) : (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-                    {filteredPartners.map((partnerData) => (
-                      <Card key={partnerData.relationshipId} className="overflow-hidden h-full flex flex-col">
-                        <CardContent className="p-0 flex-1 flex flex-col">
-                          <div className="p-4 flex-1">
-                          <div className="flex justify-between items-start">
-                              <div className="flex items-center gap-3">
-                                <Avatar className="h-10 w-10">
-                                  <AvatarFallback className="bg-primary/10 text-primary">
-                                    {partnerData.partner.fullName.charAt(0)}
-                                  </AvatarFallback>
-                                </Avatar>
-                                <div>
-                                  <h3 className="font-medium">{partnerData.partner.fullName}</h3>
-                                  <p className="text-xs text-muted-foreground">{partnerData.partner.phone}</p>
-                                </div>
-                              </div>
-                              <Badge variant={partnerData.status === 'ACTIVE' ? "success" : "destructive"} className="capitalize">
-                                {partnerData.status.toLowerCase()}
-                              </Badge>
-                            </div>
-                            
-                            <div className="mt-4 space-y-3">
-                              <div className="flex justify-between">
-                                <span className="text-sm text-muted-foreground">Email</span>
-                                <span className="text-sm font-medium truncate max-w-[150px]">
-                                  {partnerData.partner.email}
-                                </span>
-                              </div>
-                              <div className="flex justify-between">
-                                <span className="text-sm text-muted-foreground">Payment</span>
-                                <span className="text-sm font-medium">
-                                  {partnerData.commissionType === 'PERCENTAGE' 
-                                    ? `${partnerData.commissionRate}% Commission` 
-                                    : `₹${partnerData.commissionRate} Fixed`}
-                                </span>
-                              </div>
-                              <div className="flex justify-between">
-                                <span className="text-sm text-muted-foreground">Balance</span>
-                                <span className="text-sm font-medium">₹{partnerData.partner.wallet || 0}</span>
-                              </div>
-                            </div>
+                  filteredPartners.map((item) => (
+                    <tr 
+                      key={item.partner._id} 
+                      className="border-b transition-colors hover:bg-muted/50"
+                    >
+                      <td className="p-4 align-middle">
+                        <div className="flex items-center gap-3">
+                          <Avatar className="h-9 w-9">
+                            <AvatarFallback className="bg-primary/10 text-primary">
+                              {item.partner.fullName.charAt(0)}
+                            </AvatarFallback>
+                          </Avatar>
+                          <div>
+                            <p className="font-medium">{item.partner.fullName}</p>
+                            <p className="text-xs text-muted-foreground">{item.partner.email}</p>
                           </div>
-                          
-                          <div className="border-t border-border mt-4">
-                            <div className="flex items-center justify-end p-4 gap-2">
-                              <DropdownMenu>
-                                <DropdownMenuTrigger asChild>
-                                  <Button variant="outline" size="sm">
-                                    <MoreHorizontal className="h-4 w-4 mr-2" />
-                                    Actions
-                                  </Button>
-                                </DropdownMenuTrigger>
-                                <DropdownMenuContent align="end" className="w-[180px]">
-                                  <DropdownMenuItem onClick={() => openEditPartnerDialog(partnerData.partner._id)}>
-                                    <Edit className="h-4 w-4 mr-2" />
-                                    Edit Partner
-                                  </DropdownMenuItem>
-                                  <DropdownMenuItem>
-                                    <Wallet className="h-4 w-4 mr-2" />
-                                    Transfer Funds
-                                  </DropdownMenuItem>
-                                  <DropdownMenuItem 
-                                    className={partnerData.status === 'ACTIVE' ? "text-destructive" : "text-green-600"}
-                                    onClick={() => updatePartnerStatus(
-                                      partnerData.partner._id, 
-                                      partnerData.status === 'ACTIVE' ? 'INACTIVE' : 'ACTIVE'
-                                    )}
-                                  >
-                                    {partnerData.status === 'ACTIVE' ? 'Deactivate' : 'Activate'}
-                                  </DropdownMenuItem>
-                                  <DropdownMenuItem 
-                                    className="text-destructive focus:text-destructive focus:bg-destructive/10"
-                                    onClick={() => openDeleteDialog(partnerData.partner._id)}
-                                  >
-                                    <Trash2 className="h-4 w-4 mr-2" />
-                                    Delete Partner
-                                  </DropdownMenuItem>
-                                </DropdownMenuContent>
-                              </DropdownMenu>
-                            </div>
-                          </div>
-                        </CardContent>
-                      </Card>
-                    ))}
-                  </div>
+                        </div>
+                      </td>
+                      <td className="p-4 align-middle">{item.partner.phone}</td>
+                      <td className="p-4 align-middle">
+                        {item.commissionType === 'PERCENTAGE' 
+                          ? `${item.commissionRate}%` 
+                          : `₹${item.commissionRate}`}
+                      </td>
+                      <td className="p-4 align-middle">₹{item.partner.wallet || 0}</td>
+                      <td className="p-4 align-middle">
+                        <Badge variant={item.status === 'ACTIVE' ? 'default' : 'secondary'}>
+                          {item.status}
+                        </Badge>
+                      </td>
+                      <td className="p-4 align-middle text-right">
+                        <div className="flex items-center justify-end gap-2">
+                          <Button 
+                            variant="outline" 
+                            size="sm"
+                            onClick={() => openTransferFundsDialog(item.partner._id)}
+                          >
+                            <CreditCard className="h-4 w-4" />
+                          </Button>
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button variant="ghost" size="sm">
+                                <MoreHorizontal className="h-4 w-4" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                              <DropdownMenuItem
+                                onClick={() => openEditPartnerDialog(item.partner._id)}
+                              >
+                                <Edit className="h-4 w-4 mr-2" />
+                                Edit Details
+                              </DropdownMenuItem>
+                              <DropdownMenuItem
+                                onClick={() => updatePartnerStatus(
+                                  item.partner._id, 
+                                  item.status === 'ACTIVE' ? 'INACTIVE' : 'ACTIVE'
+                                )}
+                              >
+                                {item.status === 'ACTIVE' ? (
+                                  <>
+                                    <X className="h-4 w-4 mr-2" />
+                                    Deactivate
+                                  </>
+                                ) : (
+                                  <>
+                                    <Check className="h-4 w-4 mr-2" />
+                                    Activate
+                                  </>
+                                )}
+                              </DropdownMenuItem>
+                              <DropdownMenuItem
+                                className="text-destructive focus:text-destructive"
+                                onClick={() => openDeleteDialog(item.partner._id)}
+                              >
+                                <Trash2 className="h-4 w-4 mr-2" />
+                                Delete
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        </div>
+                      </td>
+                    </tr>
+                  ))
                 )}
-              </TabsContent>
-            </Tabs>
-          </CardContent>
-        </Card>
+              </tbody>
+            </table>
+          </div>
+        </div>
       </div>
     </AppLayout>
   );

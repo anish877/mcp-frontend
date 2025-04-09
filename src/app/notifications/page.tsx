@@ -168,11 +168,6 @@ const Notifications = () => {
               <CheckCircle2 className="h-4 w-4 mr-1" />
               Mark All as Read
             </Button>
-            
-            <Button variant="outline">
-              <Settings className="h-4 w-4 mr-1" />
-              Settings
-            </Button>
           </div>
         </div>
         
@@ -351,76 +346,6 @@ const Notifications = () => {
                 <Button variant="outline" size="icon" className="h-8 w-8">
                   <ChevronRight className="h-4 w-4" />
                 </Button>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-        
-        <Card>
-          <CardHeader>
-            <CardTitle>Notification Settings</CardTitle>
-            <CardDescription>Customize your notification preferences</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="font-medium">Order Notifications</p>
-                  <p className="text-sm text-muted-foreground">
-                    Receive notifications when orders are created, updated, or completed
-                  </p>
-                </div>
-                <Switch defaultChecked />
-              </div>
-              
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="font-medium">Payment Alerts</p>
-                  <p className="text-sm text-muted-foreground">
-                    Notifications for payment transactions and low balance alerts
-                  </p>
-                </div>
-                <Switch defaultChecked />
-              </div>
-              
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="font-medium">Partner Updates</p>
-                  <p className="text-sm text-muted-foreground">
-                    Updates about partner activities, status changes, and performance
-                  </p>
-                </div>
-                <Switch defaultChecked />
-              </div>
-              
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="font-medium">System Notifications</p>
-                  <p className="text-sm text-muted-foreground">
-                    System maintenance, updates, and important announcements
-                  </p>
-                </div>
-                <Switch defaultChecked />
-              </div>
-              
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="font-medium">Email Notifications</p>
-                  <p className="text-sm text-muted-foreground">
-                    Receive a copy of important notifications via email
-                  </p>
-                </div>
-                <Switch />
-              </div>
-              
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="font-medium">SMS Alerts</p>
-                  <p className="text-sm text-muted-foreground">
-                    Get SMS alerts for high-priority notifications
-                  </p>
-                </div>
-                <Switch />
               </div>
             </div>
           </CardContent>
