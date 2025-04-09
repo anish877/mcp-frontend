@@ -3,7 +3,6 @@ import React, { useEffect, useState } from 'react';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { 
@@ -87,6 +86,8 @@ const Wallet = () => {
     sent: { total: 0, breakdown: [] },
     netFlow: 0
   });
+  const [withdrawFund,setWithdrawFund] = useState(0)
+  const [bankDetails,setBankDetails] = useState()
   
   // Load Razorpay script when component mounts
   useEffect(() => {
@@ -113,6 +114,11 @@ const Wallet = () => {
       });
     }
   };
+
+  const handleWithdrawFund = async ()=>{
+    const response = await axios.post(BACKEND_URL+"/withdraw",{})
+    setIsWithdrawOpen(false)
+  }
 
   const fetchTransactions = async () => {
     setIsLoading(true);
@@ -153,10 +159,10 @@ const Wallet = () => {
 
   const fetchTransactionSummary = async () => {
     try {
-      const response = await axios.get(`${BACKEND_URL}/wallet/transaction/summary?period=${summaryPeriod}`, {
+      const response = await axios.get(BACKEND_URL+`/wallet/transaction/summary`, {
         withCredentials: true
       });
-      
+      console.log(response)
       if (response.data.success) {
         setTransactionSummary(response.data.data);
       }
@@ -368,7 +374,7 @@ const Wallet = () => {
   };
 
   // Get status badge properties
-  const getStatusInfo = (status) => {
+  const getStatusInfo = (status: string | number) => {
     return statusMap[status] || { 
       badgeVariant: 'secondary', 
       icon: Info 
@@ -376,7 +382,7 @@ const Wallet = () => {
   };
 
   // Determine if the transaction is incoming or outgoing for the user
-  const getTransactionDirection = (transaction) => {
+  const getTransactionDirection = (transaction: never) => {
     // This assumes the backend would include whether the current user is the receiver
     return transaction.isIncoming ? 'credit' : 'debit';
   };
@@ -499,7 +505,7 @@ const Wallet = () => {
                             <Button variant="outline" onClick={() => setIsWithdrawOpen(false)}>
                               Cancel
                             </Button>
-                            <Button onClick={() => setIsWithdrawOpen(false)}>
+                            <Button onClick={() => handleWithdrawFund()}>
                               Withdraw
                             </Button>
                           </div>

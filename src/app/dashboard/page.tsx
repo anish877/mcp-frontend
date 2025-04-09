@@ -14,10 +14,16 @@ import { useRouter } from 'next/navigation';
 
 const Dashboard = () => {
   const isMobile = useIsMobile();
-  const [balance,setBalance] = useState(0)
+  const [balance, setBalance] = useState(0)
   const [transactions, setTransactions] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const router = useRouter();
+  const [refreshTrigger, setRefreshTrigger] = useState(0);
+  const [dateRange, setDateRange] = useState<{startDate?: string, endDate?: string}>({});
+  
+  const refreshStats = () => {
+    setRefreshTrigger(prev => prev + 1);
+  };
 
   useEffect(() => {
     fetchRecentTransactions();
@@ -44,20 +50,22 @@ const Dashboard = () => {
     }
   };
 
-  const handleViewAll = (transactionId: any) => {
+  const handleViewAll = (transactionId) => {
     if (transactionId) {
       router.push(`/wallet?transaction=${transactionId}`);
     } else {
       router.push('/wallet');
     }
   };
-  useEffect(()=>{
-    const fetchDashboard = async ()=>{
-    const walletbalance  = await axios.get(BACKEND_URL+"/wallet/balance",{withCredentials:true})
-    setBalance(walletbalance.data.data.balance)
+  
+  useEffect(() => {
+    const fetchDashboard = async () => {
+      const walletbalance = await axios.get(BACKEND_URL+"/wallet/balance", {withCredentials: true})
+      setBalance(walletbalance.data.data.balance)
     }
     fetchDashboard()
-  },[])
+  }, [])
+  
   return (
     <AppLayout>
       <div className="space-y-8">
@@ -66,41 +74,50 @@ const Dashboard = () => {
           <p className="text-muted-foreground mt-1">Welcome back to your dashboard</p>
         </div>
         
-        <div className={`grid ${isMobile ? 'grid-cols-1' : 'grid-cols-1 md:grid-cols-3'} gap-6`}>
-          <WalletCard balance={balance} />
+        {/* First row: Wallet + Stats */}
+        <div className="grid grid-cols-1 md:grid-cols-12 gap-6">
+          {/* Wallet card takes 4 columns on md screens */}
+          <div className="md:col-span-4">
+            <WalletCard balance={balance} />
+          </div>
           
-          <div className={`col-span-2 grid ${isMobile ? 'grid-cols-1' : 'grid-cols-3'} gap-4`}>
-            <StatCard 
-              title="Total Orders" 
-              value="1,856" 
-              icon={ShoppingBag}
-              trend={{ value: 12, isPositive: true }}
-            />
-            <StatCard 
-              title="Completed Orders" 
-              value="1,643" 
-              icon={TrendingUp}
-              trend={{ value: 8, isPositive: true }}
-            />
-            <StatCard 
-              title="Pending Orders" 
-              value="213" 
-              icon={Clock}
-              trend={{ value: 3, isPositive: false }}
-            />
+          {/* Stats section takes 8 columns on md screens */}
+          <div className="md:col-span-8">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 h-full">
+              <StatCard 
+                title="Total Orders" 
+                value="1,856" 
+                icon={ShoppingBag}
+                trend={{ value: 12, isPositive: true }}
+              />
+              <StatCard 
+                title="Completed Orders" 
+                value="1,643" 
+                icon={TrendingUp}
+                trend={{ value: 8, isPositive: true }}
+              />
+              <StatCard 
+                title="Pending Orders" 
+                value="213" 
+                icon={Clock}
+                trend={{ value: 3, isPositive: false }}
+              />
+            </div>
           </div>
         </div>
 
-        <div className={`grid ${isMobile ? 'grid-cols-1' : 'grid-cols-1 lg:grid-cols-2'} gap-6`}>
+        {/* Second row: Charts + Transactions */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           <OrdersChart />
           <RecentTransactions 
             transactions={transactions} 
             loading={isLoading}
             maxItems={5}
             onViewAll={handleViewAll} 
-            />
+          />
         </div>
 
+        {/* Third row: Partners */}
         <PartnersList />
       </div>
     </AppLayout>

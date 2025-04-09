@@ -1,6 +1,6 @@
 
 import React from 'react';
-import { Wallet, PlusCircle, ArrowDownToLine } from 'lucide-react';
+import { Wallet, PlusCircle, ArrowDownToLine, MoveUpRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
   Card,
@@ -10,6 +10,7 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card';
+import { useRouter } from 'next/navigation';
 
 type WalletCardProps = {
   balance: number;
@@ -17,6 +18,7 @@ type WalletCardProps = {
 };
 
 export function WalletCard({ balance, currency = "₹" }: WalletCardProps) {
+    const router = useRouter()
   return (
     <Card className="overflow-hidden border-0 shadow-md bg-gradient-to-br from-primary to-primary/80">
       <CardHeader className="text-primary-foreground pb-2">
@@ -32,13 +34,9 @@ export function WalletCard({ balance, currency = "₹" }: WalletCardProps) {
         <div className="text-3xl font-bold">{currency}{balance.toLocaleString()}</div>
       </CardContent>
       <CardFooter className="flex gap-2 pt-0">
-        <Button variant="secondary" size="sm" className="flex-1">
-          <PlusCircle className="h-4 w-4 mr-1" />
-          Add
-        </Button>
-        <Button variant="secondary" size="sm" className="flex-1">
-          <ArrowDownToLine className="h-4 w-4 mr-1" />
-          Withdraw
+        <Button variant="secondary" size="sm" className="flex-1" onClick={()=>router.push("/wallet")}>
+          <MoveUpRight className="h-4 w-4 mr-1" />
+          Go to Wallet
         </Button>
       </CardFooter>
     </Card>

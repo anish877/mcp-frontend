@@ -64,6 +64,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { toast } from "@/hooks/use-toast";
 import axios from 'axios';
 import { BACKEND_URL } from '@/config';
+import MapView from '@/components/ui/MapView';
 
 // Order type definition based on backend model
 type Order = {
@@ -762,6 +763,11 @@ const Orders = () => {
                                     <p className="font-medium">{order.customerId?.fullName}</p>
                                     <p className="text-sm text-muted-foreground">{order.customerId?.phone}</p>
                                   </div>
+                                  <div className="mt-2">
+                                    <div className="h-32 w-full border rounded overflow-hidden">
+                                        <MapView location={order.location} isEditable={false} />
+                                    </div>
+                                    </div>
                                   
                                   <div className="text-sm">
                                     <p className="text-muted-foreground">{order.location?.address}</p>
@@ -885,70 +891,79 @@ const Orders = () => {
   </div>
   
   {/* View Order Dialog */}
-  <Dialog open={viewOrderDialog} onOpenChange={setViewOrderDialog}>
-    <DialogContent className="sm:max-w-lg">
-      <DialogHeader>
-        <DialogTitle>Order Details</DialogTitle>
-        <DialogDescription>
-          View complete information about this order
-        </DialogDescription>
-      </DialogHeader>
-      
-      {selectedOrder && (
-        <div className="space-y-4">
-          <div className="flex justify-between items-center">
-            <p className="text-sm text-muted-foreground">Order ID: <span className="font-medium text-foreground">{selectedOrder._id}</span></p>
-            {getStatusBadge(selectedOrder.status)}
-          </div>
-          
-          <div className="space-y-2">
-            <h4 className="text-sm font-medium">Customer Information</h4>
-            <div className="bg-muted/50 p-3 rounded-md">
-              <p><span className="font-medium">Name:</span> {selectedOrder.customerId?.fullName}</p>
-              <p><span className="font-medium">Phone:</span> {selectedOrder.customerId?.phone}</p>
-              <p><span className="font-medium">Email:</span> {selectedOrder.customerId?.email}</p>
-            </div>
-          </div>
-          
-          <div className="space-y-2">
-            <h4 className="text-sm font-medium">Order Information</h4>
-            <div className="bg-muted/50 p-3 rounded-md">
-              <p><span className="font-medium">Amount:</span> ₹{selectedOrder.orderAmount}</p>
-              <p><span className="font-medium">Location:</span> {selectedOrder.location?.address}</p>
-              <p><span className="font-medium">Created:</span> {formatDate(selectedOrder.createdAt)}</p>
-              {selectedOrder.completedAt && (
-                <p><span className="font-medium">Completed:</span> {formatDate(selectedOrder.completedAt)}</p>
-              )}
-              {selectedOrder.cancelReason && (
-                <p><span className="font-medium">Cancel Reason:</span> {selectedOrder.cancelReason}</p>
-              )}
-              <p><span className="font-medium">MicroEntrepreneur:</span> {selectedOrder.mcpId?.fullName}</p>
-            </div>
-          </div>
-          
-          <div className="space-y-2">
-            <h4 className="text-sm font-medium">Pickup Partner Information</h4>
-            <div className="bg-muted/50 p-3 rounded-md">
-              {selectedOrder.pickupPartnerId ? (
-                <>
-                  <p><span className="font-medium">Name:</span> {selectedOrder.pickupPartnerId?.fullName}</p>
-                  <p><span className="font-medium">Phone:</span> {selectedOrder.pickupPartnerId?.phone}</p>
-                </>
-              ) : (
-                <p>No pickup partner assigned yet</p>
-              )}
-            </div>
+  {/* View Order Dialog */}
+<Dialog open={viewOrderDialog} onOpenChange={setViewOrderDialog}>
+  <DialogContent className="sm:max-w-lg">
+    <DialogHeader>
+      <DialogTitle>Order Details</DialogTitle>
+      <DialogDescription>
+        View complete information about this order
+      </DialogDescription>
+    </DialogHeader>
+    
+    {selectedOrder && (
+      <div className="space-y-4">
+        <div className="flex justify-between items-center">
+          <p className="text-sm text-muted-foreground">Order ID: <span className="font-medium text-foreground">{selectedOrder._id}</span></p>
+          {getStatusBadge(selectedOrder.status)}
+        </div>
+        
+        <div className="space-y-2">
+          <h4 className="text-sm font-medium">Customer Information</h4>
+          <div className="bg-muted/50 p-3 rounded-md">
+            <p><span className="font-medium">Name:</span> {selectedOrder.customerId?.fullName}</p>
+            <p><span className="font-medium">Phone:</span> {selectedOrder.customerId?.phone}</p>
+            <p><span className="font-medium">Email:</span> {selectedOrder.customerId?.email}</p>
           </div>
         </div>
-      )}
-      
-      <DialogFooter>
-        <Button variant="outline" onClick={() => setViewOrderDialog(false)}>
-          Close
-        </Button>
-      </DialogFooter>
-    </DialogContent>
-  </Dialog>
+        
+        <div className="space-y-2">
+          <h4 className="text-sm font-medium">Order Information</h4>
+          <div className="bg-muted/50 p-3 rounded-md">
+            <p><span className="font-medium">Amount:</span> ₹{selectedOrder.orderAmount}</p>
+            <p><span className="font-medium">Location:</span> {selectedOrder.location?.address}</p>
+            <p><span className="font-medium">Created:</span> {formatDate(selectedOrder.createdAt)}</p>
+            {selectedOrder.completedAt && (
+              <p><span className="font-medium">Completed:</span> {formatDate(selectedOrder.completedAt)}</p>
+            )}
+            {selectedOrder.cancelReason && (
+              <p><span className="font-medium">Cancel Reason:</span> {selectedOrder.cancelReason}</p>
+            )}
+            <p><span className="font-medium">MicroEntrepreneur:</span> {selectedOrder.mcpId?.fullName}</p>
+          </div>
+        </div>
+        
+        {/* Add Map Component to view location */}
+        <div className="space-y-2">
+          <h4 className="text-sm font-medium">Pickup Location</h4>
+          <div className="border rounded-md overflow-hidden">
+            <MapView location={selectedOrder.location} isEditable={false} setLocation={undefined} />
+          </div>
+        </div>
+        
+        <div className="space-y-2">
+          <h4 className="text-sm font-medium">Pickup Partner Information</h4>
+          <div className="bg-muted/50 p-3 rounded-md">
+            {selectedOrder.pickupPartnerId ? (
+              <>
+                <p><span className="font-medium">Name:</span> {selectedOrder.pickupPartnerId?.fullName}</p>
+                <p><span className="font-medium">Phone:</span> {selectedOrder.pickupPartnerId?.phone}</p>
+              </>
+            ) : (
+              <p>No pickup partner assigned yet</p>
+            )}
+          </div>
+        </div>
+      </div>
+    )}
+    
+    <DialogFooter>
+      <Button variant="outline" onClick={() => setViewOrderDialog(false)}>
+        Close
+      </Button>
+    </DialogFooter>
+  </DialogContent>
+</Dialog>
   
   {/* Assign Partner Dialog */}
   <Dialog open={assignDialog} onOpenChange={setAssignDialog}>
@@ -1061,91 +1076,104 @@ const Orders = () => {
   </Dialog>
 
   {/* New Order Dialog */}
-  <Dialog open={newOrderDialog} onOpenChange={setNewOrderDialog}>
-    <DialogContent className="sm:max-w-lg">
-      <DialogHeader>
-        <DialogTitle>Create New Order</DialogTitle>
-        <DialogDescription>
-          Fill in the details to create a new order
-        </DialogDescription>
-      </DialogHeader>
-      
-      <div className="space-y-4 py-4">
-        {/* Form inputs for creating a new order */}
-        <div className="grid grid-cols-2 gap-4">
-          <div className="space-y-2">
-            <Label htmlFor="customerId">Customer</Label>
-            <Select 
-              value={newOrderData.customerId} 
-              onValueChange={(value) => setNewOrderData({...newOrderData, customerId: value})}
-            >
-              <SelectTrigger id="customerId">
-                <SelectValue placeholder="Select customer" />
-              </SelectTrigger>
-              <SelectContent>
-                {/* This would be populated with customer data */}
-                <SelectItem value="customer-1">John Doe</SelectItem>
-                <SelectItem value="customer-2">Jane Smith</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          
-          <div className="space-y-2">
-            <Label htmlFor="mcpId">Micro-Entrepreneur</Label>
-            <Select 
-              value={newOrderData.mcpId} 
-              onValueChange={(value) => setNewOrderData({...newOrderData, mcpId: value})}
-            >
-              <SelectTrigger id="mcpId">
-                <SelectValue placeholder="Select MCP" />
-              </SelectTrigger>
-              <SelectContent>
-                {/* This would be populated with MCP data */}
-                <SelectItem value="mcp-1">MCP 1</SelectItem>
-                <SelectItem value="mcp-2">MCP 2</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
+<Dialog open={newOrderDialog} onOpenChange={setNewOrderDialog}>
+  <DialogContent className="sm:max-w-lg">
+    <DialogHeader>
+      <DialogTitle>Create New Order</DialogTitle>
+      <DialogDescription>
+        Fill in the details to create a new order
+      </DialogDescription>
+    </DialogHeader>
+    
+    <div className="space-y-4 py-4">
+      {/* Form inputs for creating a new order */}
+      <div className="grid grid-cols-2 gap-4">
+        <div className="space-y-2">
+          <Label htmlFor="customerId">Customer</Label>
+          <Select 
+            value={newOrderData.customerId} 
+            onValueChange={(value) => setNewOrderData({...newOrderData, customerId: value})}
+          >
+            <SelectTrigger id="customerId">
+              <SelectValue placeholder="Select customer" />
+            </SelectTrigger>
+            <SelectContent>
+              {/* This would be populated with customer data */}
+              <SelectItem value="customer-1">John Doe</SelectItem>
+              <SelectItem value="customer-2">Jane Smith</SelectItem>
+            </SelectContent>
+          </Select>
         </div>
         
         <div className="space-y-2">
-          <Label htmlFor="amount">Order Amount (₹)</Label>
-          <Input 
-            id="amount" 
-            type="number" 
-            placeholder="Enter amount"
-            value={newOrderData.orderAmount}
-            onChange={(e) => setNewOrderData({...newOrderData, orderAmount: parseFloat(e.target.value)})}
-          />
-        </div>
-        
-        <div className="space-y-2">
-          <Label htmlFor="address">Pickup Address</Label>
-          <Textarea 
-            id="address" 
-            placeholder="Enter full address"
-            value={newOrderData.location.address}
-            onChange={(e) => setNewOrderData({
-              ...newOrderData, 
-              location: {
-                ...newOrderData.location,
-                address: e.target.value
-              }
-            })}
-          />
+          <Label htmlFor="mcpId">Micro-Entrepreneur</Label>
+          <Select 
+            value={newOrderData.mcpId} 
+            onValueChange={(value) => setNewOrderData({...newOrderData, mcpId: value})}
+          >
+            <SelectTrigger id="mcpId">
+              <SelectValue placeholder="Select MCP" />
+            </SelectTrigger>
+            <SelectContent>
+              {/* This would be populated with MCP data */}
+              <SelectItem value="mcp-1">MCP 1</SelectItem>
+              <SelectItem value="mcp-2">MCP 2</SelectItem>
+            </SelectContent>
+          </Select>
         </div>
       </div>
       
-      <DialogFooter>
-        <Button variant="outline" onClick={() => setNewOrderDialog(false)}>
-          Cancel
-        </Button>
-        <Button onClick={handleCreateOrder}>
-          Create Order
-        </Button>
-      </DialogFooter>
-    </DialogContent>
-  </Dialog>
+      <div className="space-y-2">
+        <Label htmlFor="amount">Order Amount (₹)</Label>
+        <Input 
+          id="amount" 
+          type="number" 
+          placeholder="Enter amount"
+          value={newOrderData.orderAmount}
+          onChange={(e) => setNewOrderData({...newOrderData, orderAmount: parseFloat(e.target.value)})}
+        />
+      </div>
+      
+      <div className="space-y-2">
+        <Label htmlFor="address">Pickup Address</Label>
+        <Textarea 
+          id="address" 
+          placeholder="Enter full address"
+          value={newOrderData.location.address}
+          onChange={(e) => setNewOrderData({
+            ...newOrderData, 
+            location: {
+              ...newOrderData.location,
+              address: e.target.value
+            }
+          })}
+        />
+      </div>
+      
+      {/* Add Map Component */}
+      <div className="space-y-2">
+        <Label>Set Location on Map</Label>
+        <div className="border rounded-md overflow-hidden">
+          <MapView 
+            location={newOrderData.location} 
+            setLocation={(location: any) => setNewOrderData({...newOrderData, location})} 
+            isEditable={true}
+          />
+        </div>
+        <p className="text-xs text-muted-foreground">Click on the map to set the pickup location</p>
+      </div>
+    </div>
+    
+    <DialogFooter>
+      <Button variant="outline" onClick={() => setNewOrderDialog(false)}>
+        Cancel
+      </Button>
+      <Button onClick={handleCreateOrder}>
+        Create Order
+      </Button>
+    </DialogFooter>
+  </DialogContent>
+</Dialog>
 </AppLayout>
 );
 };
