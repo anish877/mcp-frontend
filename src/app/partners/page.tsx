@@ -57,6 +57,8 @@ import {
 import { BACKEND_URL } from '@/config';
 import axios from 'axios';
 import { toast } from '@/hooks/use-toast';
+import verifyUserSession from '@/utils/verify';
+import { useRouter } from 'next/navigation';
 
 // Interface to match backend data structure
 interface Partner {
@@ -140,6 +142,17 @@ const Partners = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [selectedPartnerDetails, setSelectedPartnerDetails] = useState<Partner | null>(null);
   const [walletBalance, setWalletBalance] = useState(0);
+  const router = useRouter()
+
+  useEffect(() => {
+    const checkUserLoggedIn = async () => {
+      const isVerified = await verifyUserSession();
+      if (!isVerified) {
+        router.push("/login");
+      }
+    };
+    checkUserLoggedIn();
+  }, []);
 
   // Fetch partners from backend
   const fetchPartners = async () => {

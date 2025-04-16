@@ -11,6 +11,7 @@ import { useIsMobile } from '@/hooks/use-mobile';
 import axios from 'axios';
 import { BACKEND_URL } from '@/config';
 import { useRouter } from 'next/navigation';
+import verifyUserSession from '@/utils/verify';
 
 const Dashboard = () => {
   const isMobile = useIsMobile();
@@ -20,6 +21,16 @@ const Dashboard = () => {
   const router = useRouter();
   const [refreshTrigger, setRefreshTrigger] = useState(0);
   const [dateRange, setDateRange] = useState<{startDate?: string, endDate?: string}>({});
+
+  useEffect(() => {
+    const checkUserLoggedIn = async () => {
+      const isVerified = await verifyUserSession();
+      if (!isVerified) {
+        router.push("/login");
+      }
+    };
+    checkUserLoggedIn();
+  }, []);
   
   const refreshStats = () => {
     setRefreshTrigger(prev => prev + 1);

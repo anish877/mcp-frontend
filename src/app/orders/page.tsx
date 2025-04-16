@@ -65,6 +65,8 @@ import { toast } from "@/hooks/use-toast";
 import axios from 'axios';
 import { BACKEND_URL } from '@/config';
 import MapView from '@/components/ui/MapView';
+import verifyUserSession from '@/utils/verify';
+import { useRouter } from 'next/navigation';
 
 // Order type definition based on backend model
 type Order = {
@@ -136,6 +138,7 @@ const Orders = () => {
   const [selectedPartnerId, setSelectedPartnerId] = useState('');
   const [newStatus, setNewStatus] = useState<'PENDING' | 'ASSIGNED' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED'>('PENDING');
   const [cancelReason, setCancelReason] = useState('');
+  const router = useRouter()
   
   // New order form data
   const [newOrderData, setNewOrderData] = useState({
@@ -156,6 +159,16 @@ const Orders = () => {
     pending: 0,
     cancelled: 0
   });
+
+  useEffect(() => {
+    const checkUserLoggedIn = async () => {
+      const isVerified = await verifyUserSession();
+      if (!isVerified) {
+        router.push("/login");
+      }
+    };
+    checkUserLoggedIn();
+  }, []);
 
   const fetchOrders = async () => {
     setIsLoading(true);

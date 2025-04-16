@@ -1,5 +1,5 @@
 "use client";
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -13,6 +13,7 @@ import { useToast } from '@/hooks/use-toast';
 import { useRouter } from 'next/navigation';
 import axios from "axios";
 import { BACKEND_URL } from '@/config';
+import verifyUserSession from '@/utils/verify';
 
 const loginSchema = z.object({
   email: z.string().email({ message: 'Please enter a valid email address' }),
@@ -34,6 +35,16 @@ export default function Login() {
       password: '',
     },
   });
+
+  useEffect(() => {
+    const checkUserLoggedIn = async () => {
+      const isVerified = await verifyUserSession();
+      if (isVerified) {
+        router.push("/dashboard");
+      }
+    };
+    checkUserLoggedIn();
+  }, []);
 
   async function onSubmit(data: LoginFormValues) {
     try {

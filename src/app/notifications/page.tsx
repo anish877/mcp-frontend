@@ -25,6 +25,8 @@ import { Button } from '@/components/ui/button';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { BACKEND_URL } from '@/config';
 import axios from 'axios';
+import verifyUserSession from '@/utils/verify';
+import { useRouter } from 'next/navigation';
 
 // Types matching the backend model
 type Notification = {
@@ -140,6 +142,17 @@ const Notifications = () => {
   });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const router = useRouter()
+
+  useEffect(() => {
+    const checkUserLoggedIn = async () => {
+      const isVerified = await verifyUserSession();
+      if (!isVerified) {
+        router.push("/login");
+      }
+    };
+    checkUserLoggedIn();
+  }, []);
   
   // Fetch notifications based on current filter
   const fetchNotifications = async () => {

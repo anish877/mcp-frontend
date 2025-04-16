@@ -1,5 +1,5 @@
 "use client";
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -14,6 +14,7 @@ import { useRouter } from 'next/navigation';
 import axios from "axios";
 import { BACKEND_URL } from '@/config';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import verifyUserSession from '@/utils/verify';
 
 const signupSchema = z.object({
   fullName: z.string().min(2, { message: 'Name must be at least 2 characters' }),
@@ -49,6 +50,16 @@ export default function Signup() {
       role: 'MCP'
     },
   });
+
+  useEffect(() => {
+    const checkUserLoggedIn = async () => {
+      const isVerified = await verifyUserSession();
+      if (isVerified) {
+        router.push("/dashboard");
+      }
+    };
+    checkUserLoggedIn();
+  }, []);
 
   async function onSubmit(data: SignupFormValues) {
     try {
